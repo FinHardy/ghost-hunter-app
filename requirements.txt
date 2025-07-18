@@ -1,0 +1,15 @@
+torch
+torchvision
+pytorch-lightning
+lightning
+scikit-learn
+tqdm
+matplotlib
+numpy
+scipy
+scikit-image
+wandb
+pyyaml
+pillow
+fire
+py4DSTEM
