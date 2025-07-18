@@ -51,8 +51,8 @@ class TestRawPngLoader:
         data_dir, labels_file = setup_test_dataset
 
         config = MagicMock()
-        config.data.data_dir = data_dir
-        config.data.train_dir = data_dir
+        config.data.data_dir = os.path.join(data_dir, "images")
+        config.data.train_dir = os.path.join(data_dir, "images")
         config.data.labels_file = labels_file
         config.data.image_size = 64
         config.data.train_ratio = 0.6
@@ -105,8 +105,8 @@ class TestRawPngLoader:
         assert isinstance(images, torch.Tensor)
         assert isinstance(labels, torch.Tensor)
         assert images.shape[1] == 1  # Single channel
-        assert images.shape[2] == 64  # Height
-        assert images.shape[3] == 64  # Width
+        assert images.shape[2] == 256  # Height
+        assert images.shape[3] == 256  # Width
 
     def test_val_dataloader(self, mock_config):
         """Test validation dataloader creation"""

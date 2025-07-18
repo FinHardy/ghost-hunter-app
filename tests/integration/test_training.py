@@ -34,7 +34,7 @@ class TestTrainingPipeline:
         # Create test images
         for i in range(10):  # Small dataset for testing
             image_array = np.random.randint(0, 256, (64, 64), dtype=np.uint8)
-            image = Image.fromarray(image_array, mode="L")
+            image = Image.fromarray(image_array).convert("L")  # Convert to grayscale
             image.save(os.path.join(data_dir, f"test_{i}.png"))
 
         key = {0: "na", 1: "horizontal", 2: "vertical"}
@@ -126,33 +126,30 @@ class TestTrainingPipeline:
     @patch("src.run.pl.Trainer")
     def test_training_initialization(self, mock_trainer, setup_training_data):
         """Test that training initializes without errors"""
-        config_file = os.path.basename(setup_training_data["config_file"])
+        config_file = setup_training_data["config_file"]
 
         # Mock trainer to avoid actual training
         mock_trainer_instance = MagicMock()
         mock_trainer.return_value = mock_trainer_instance
 
-        # Change to temp directory to find config
-        old_cwd = os.getcwd()
-        try:
-            os.chdir(setup_training_data["temp_dir"])
 
-            # This should not raise an exception
-            train_main(config_file)
+        # This should not raise an exception
+        train_main(config_file)
 
-            # Verify trainer was called
-            mock_trainer.assert_called_once()
-            mock_trainer_instance.fit.assert_called_once()
-
-        finally:
-            os.chdir(old_cwd)
+        # Verify trainer was called
+        mock_trainer.assert_called_once()
+        mock_trainer_instance.fit.assert_called_once()
 
     def test_config_loading(self, setup_training_data):
         """Test config loading functionality"""
         config_file = setup_training_data["config_file"]
-
-        # This should not raise an exception
-        config = Config.from_yaml(config_file)
+        old_cwd = os.getcwd()
+        try:
+            os.chdir(os.path.dirname(config_file))
+            # This should not raise an exception
+            config = Config.from_yaml(os.path.basename(config_file))
+        finally:
+            os.chdir(old_cwd)
 
         assert config.seed == 42
         assert config.accelerator == "cpu"
