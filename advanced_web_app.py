@@ -13,6 +13,14 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import yaml
 
+from scripts.binary_search_labeller import label
+
+# Import the DM4 image display function
+from scripts.show_image_from_dm4 import (
+    show_random_diffraction_pattern,
+    show_virtual_image,
+)
+
 # Add src to path to import modules
 sys.path.append(str(Path(__file__).parent))
 
@@ -79,7 +87,7 @@ def main():
         selected_step = st.selectbox(
             "Choose step:", steps, index=st.session_state.step - 1
         )
-        st.session_state.step = steps.index(selected_step) + 1
+        st.session_state.step = steps.index(selected_step) + 1  # type: ignore
 
         # Progress indicator
         progress = st.session_state.step / 6
@@ -181,6 +189,49 @@ def setup_configuration():
     # File upload
     st.subheader("📤 Upload DM4 File")
     dm4_file = st.file_uploader("Choose a DM4 file", type=["dm4"], key="dm4_file")
+
+    # Show DM4 info and images if uploaded
+    if dm4_file is not None:
+        st.info(
+            "Preview: Random diffraction image and virtual image from uploaded DM4 file"
+        )
+        temp_dm4_path = os.path.join(st.session_state.temp_dir, dm4_file.name)
+        with open(temp_dm4_path, "wb") as f:
+            f.write(dm4_file.getbuffer())
+
+        # Get dataset info and show dimensions
+        import py4DSTEM
+
+        try:
+            dataset = py4DSTEM.import_file(temp_dm4_path)
+            shape = dataset.data.shape  # type: ignore
+            st.write(
+                f"**Real space image dimensions:** {shape[0]} x {shape[1]} (scan positions)"
+            )
+            st.write(
+                f"**Diffraction pattern size:** {shape[2]} x {shape[3]} (detector pixels)"
+            )
+        except Exception as e:
+            st.warning(f"Could not read DM4 file info: {e}")
+
+        # Show random diffraction image
+        fig1 = plt.figure(figsize=(8, 8))
+        try:
+            show_random_diffraction_pattern(
+                temp_dm4_path, binning_param=1, save_image=False
+            )
+            st.pyplot(fig1)
+        except Exception as e:
+            st.warning(f"Could not display random diffraction image: {e}")
+
+        # Show virtual image
+
+        fig2 = plt.figure(figsize=(8, 8))
+        try:
+            show_virtual_image(temp_dm4_path, binning_param=1)
+            st.pyplot(fig2)
+        except Exception as e:
+            st.warning(f"Could not display virtual image: {e}")
 
     # Save configuration
     if st.button("💾 Save Configuration & Proceed", type="primary"):
@@ -443,16 +494,12 @@ def data_labelling():
             # Ensure labelling directory exists
             os.makedirs(os.path.dirname(config["labelling_path"]), exist_ok=True)
 
-            # Import and call labelling function - use boxed images now
-            from labelling.binary_search_labeler import label
-
+            # Call the binary search labeler with correct arguments
             label(
-                config[
-                    "boxed_png_path"
-                ],  # Changed from output_png_path to boxed_png_path
-                config["labelling_path"],
-                config["sampling_space"],
-                config["number_of_labels"],
+                png_images_file_path=config["boxed_png_path"],
+                labels_output_file=config["labelling_path"],
+                labels_to_assign=config["number_of_labels"],
+                step=config["sampling_space"],
             )
 
             st.success("🎉 Labelling interface launched!")

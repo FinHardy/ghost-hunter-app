@@ -16,7 +16,7 @@ pip install -r requirements_web.txt
 To start the advanced web app, run:
 
 ```sh
-streamlit run advanced_web_app.py
+streamlit run advanced_web_app.py --server.maxUploadSize=102400
 ```
 
 This will launch the Ghost Hunter ML Pipeline interface in your browser.
