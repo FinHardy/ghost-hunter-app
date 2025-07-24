@@ -162,9 +162,11 @@ def setup_configuration():
             key="box_size",
             help="Size of the averaging box for creating averaged images",
         )
-        
-        st.info("ℹ️ **Array dimensions will be automatically detected** from your image filenames!")
-        
+
+        st.info(
+            "ℹ️ **Array dimensions will be automatically detected** from your image filenames!"
+        )
+
         st.subheader("🤖 Training Parameters")
         max_epochs = st.number_input(
             "Max Epochs", value=50, min_value=1, key="max_epochs"

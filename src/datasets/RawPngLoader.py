@@ -64,8 +64,8 @@ class RawPngDataset(Dataset):
 
         label_out: int = self.label_map[label]
 
-        img_path = os.path.join(self.abs_path, "../../", self.train_dir, raw_img_path)
-
+        # Use train_dir and raw_img_path directly
+        img_path = os.path.join(self.train_dir, raw_img_path)
         if os.path.exists(img_path):
             image = Image.open(img_path).convert("L")
         else:
@@ -95,17 +95,17 @@ class RawPngLoader(LightningDataModule):
         self.abs_path = os.path.join(
             os.path.abspath(os.path.dirname(__file__)), "../../"
         )
-        self.train_dir = _config.data.train_dir
-        self.train_ratio = _config.data.train_ratio
-        self.test_ratio = _config.data.test_ratio
-        self.val_ratio = _config.data.val_ratio
-        self.batch_size = _config.model.batch_size
-        self.data_loader = _config.data.data_loader
-        self.num_workers = _config.data.num_workers
-        self.seed = _config.seed
-        self.device = _config.accelerator
-        self.labels_file = _config.data.labels_file
-        self.task = _config.task
+        self.train_dir: str = _config.data.train_dir
+        self.train_ratio: float = _config.data.train_ratio
+        self.test_ratio: float = _config.data.test_ratio
+        self.val_ratio: float = _config.data.val_ratio
+        self.batch_size: int = _config.model.batch_size
+        self.data_loader: str = _config.data.data_loader
+        self.num_workers: int = _config.data.num_workers
+        self.seed: int = _config.seed
+        self.device: str = _config.accelerator
+        self.labels_file: str = _config.data.labels_file
+        self.task: str = _config.task
 
         self.train_transform = transforms.Compose(
             [
@@ -121,15 +121,20 @@ class RawPngLoader(LightningDataModule):
 
         self.labels: List[dict[str, str]] = []
 
-        # TODO: this could break for other users
-        labels_file = os.path.join(self.abs_path, "labelling", self.labels_file)
+        # Use absolute path if provided, else fall back to labelling subdirectory
+        if os.path.isabs(self.labels_file):
+            labels_file = self.labels_file
+        else:
+            labels_file = os.path.join(self.abs_path, "labelling", self.labels_file)
 
-        if os.path.exists(labels_file):
+        if os.path.exists(labels_file) and labels_file.endswith(".yaml"):
             with open(labels_file, "r") as f:
                 data = yaml.safe_load(f)
                 self.labels = data["labels"]
         else:
-            raise FileNotFoundError(f"Labels file {labels_file} does not exist.")
+            raise FileNotFoundError(
+                f"Labels file {labels_file} does not exist or is not a yaml file."
+            )
 
         self.files = [entry["file"] for entry in self.labels]
 
@@ -142,7 +147,7 @@ class RawPngLoader(LightningDataModule):
         self.test_dataset: RawPngDataset
         self.val_dataset: RawPngDataset
 
-    def prepare_data(self, print_lens=True) -> None:
+    def prepare_data(self, print_lens: bool = True) -> None:
         """
         Description:
         - Prepare the dataset by splitting it into train, val, and test sets.
@@ -153,7 +158,8 @@ class RawPngLoader(LightningDataModule):
         Returns:
         - None
         """
-        files = [os.path.join(self.abs_path, self.train_dir, f) for f in self.files]
+        # Use train_dir and file directly, not abs_path
+        files = [os.path.join(self.train_dir, f) for f in self.files]
 
         data_train, data_val_test = [], []
 
@@ -222,6 +228,8 @@ class RawPngLoader(LightningDataModule):
         - None
         """
         if stage in ("fit", ""):
+            if not self.train_files or not self.val_files:
+                self.prepare_data()
             self.train_dataset = RawPngDataset(
                 self.train_files,
                 device=self.device,
@@ -239,6 +247,8 @@ class RawPngLoader(LightningDataModule):
                 task=self.task,
             )
         if stage in ("test", ""):
+            if not self.test_files:
+                self.prepare_data()
             self.test_dataset = RawPngDataset(
                 self.test_files,
                 device=self.device,
