@@ -4,14 +4,15 @@ Complete Streamlit implementation with full workflow integration
 """
 
 import os
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import streamlit as st
 import yaml
+from PIL import Image
 
 from scripts.binary_search_labeller import label
 
@@ -27,6 +28,12 @@ sys.path.append(str(Path(__file__).parent))
 try:
     from scripts.create_average_boxes import convert_all_to_boxes
     from scripts.dm4_to_png import save_dm4_BF_to_png
+    from scripts.streamlit_labeller import (
+        StreamlitLabellerState,
+        save_label,
+        get_label_statistics,
+        load_existing_labels
+    )
     from src.inference import plot_embeddings
     from src.run import main as train_model
 except ImportError as e:
@@ -53,6 +60,10 @@ def initialize_session_state():
         "labelling_done": False,
         "training_done": False,
         "inference_done": False,
+        # Labelling-specific state
+        "labeller_state": None,
+        "current_label_file": None,
+        "labelling_initialized": False,
     }
 
     for key, value in defaults.items():
@@ -218,11 +229,13 @@ def setup_configuration():
         try:
             dataset = py4DSTEM.import_file(temp_dm4_path)
             shape = dataset.data.shape  # type: ignore
+            dim1 = shape[0]
+            dim2 = shape[1]
             st.write(
-                f"**Real space image dimensions:** {shape[0]} x {shape[1]} (scan positions)"
+                f"**Real space image dimensions:** {dim1} x {dim2} (scan positions)"
             )
             st.write(
-                f"**Diffraction pattern size:** {shape[2]} x {shape[3]} (detector pixels)"
+                f"**Diffraction pattern size:** {dim1} x {dim2} (detector pixels)"
             )
         except Exception as e:
             st.warning(f"Could not read DM4 file info: {e}")
@@ -259,6 +272,8 @@ def setup_configuration():
             "boxed_png_path": f"data/boxed_png/{project_name}",
             "labelling_path": f"labelling/{project_name}_labels.yaml",
             "output_save_path": f"output/{project_name}/",
+            "dim1": dim1,
+            "dim2": dim2,
             "box_size": box_size,
             "sampling_space": sampling_interval,
             "number_of_labels": number_of_labels,
@@ -467,7 +482,7 @@ def average_boxing():
 
 
 def data_labelling():
-    """Step 4: Data Labelling"""
+    """Step 4: Data Labelling - Streamlit Native Interface"""
     st.header("🏷️ Step 4: Data Labelling")
 
     if not st.session_state.config:
@@ -480,6 +495,7 @@ def data_labelling():
 
     config = st.session_state.config
 
+    # Display configuration
     st.subheader("📋 Labelling Configuration")
     col1, col2 = st.columns(2)
 
@@ -497,54 +513,160 @@ def data_labelling():
         - 📄 Labels File: `{config["labelling_path"]}`
         """)
 
-    st.warning(
-        "⚠️ **Important:** The labelling process will open a separate GUI window. Please complete the labelling there and return here when finished."
-    )
-
-    if st.button("🎯 Start Interactive Labelling", type="primary"):
+    # Initialize labeller state if needed
+    if st.button("🚀 Initialize Labelling Session", type="primary") or st.session_state.labelling_initialized:
         try:
-            status_text = st.empty()
-            status_text.text("🚀 Opening labelling interface...")
-
             # Ensure labelling directory exists
             os.makedirs(os.path.dirname(config["labelling_path"]), exist_ok=True)
-
-            # Call the binary search labeler with correct arguments
-            label(
-                png_images_file_path=config["boxed_png_path"],
-                labels_output_file=config["labelling_path"],
-                labels_to_assign=config["number_of_labels"],
-                step=config["sampling_space"],
-            )
-
-            st.success("🎉 Labelling interface launched!")
-
+            
+            # Initialize labeller state only once
+            if not st.session_state.labelling_initialized:
+                st.session_state.labeller_state = StreamlitLabellerState(
+                    file_path=config["boxed_png_path"],
+                    output_file=config["labelling_path"],
+                    labels_to_assign=config["number_of_labels"],
+                    step=config["sampling_space"]
+                )
+                st.session_state.labelling_initialized = True
+                st.rerun()
+            
+            labeller = st.session_state.labeller_state
+            
+            # Check if labelling is complete
+            if labeller.is_complete():
+                st.success("🎉 All labels have been assigned!")
+                st.session_state.labelling_done = True
+                
+                # Show final heatmap
+                st.subheader("📊 Final Label Distribution")
+                fig, ax = plt.subplots(figsize=(10, 10))
+                final_heatmap = labeller.save_final_heatmap()
+                cmap = plt.cm.get_cmap("viridis", 4)
+                im = ax.imshow(final_heatmap, cmap=cmap, vmin=0, vmax=3)
+                ax.set_title("Final Label Map")
+                ax.axis("off")
+                plt.colorbar(im, ax=ax, ticks=[0, 1, 2, 3], label="Label")
+                st.pyplot(fig)
+                plt.close(fig)
+                
+                # Show statistics
+                st.subheader("📈 Label Statistics")
+                label_stats = get_label_statistics(config["labelling_path"])
+                for label, count in label_stats.items():
+                    st.write(f"- **{label}**: {count}")
+                
+                return
+            
+            # Get next file to label
+            if st.session_state.current_label_file is None:
+                next_file = labeller.get_next_file()
+                if next_file:
+                    st.session_state.current_label_file = next_file
+                else:
+                    st.error("❌ Could not get next file to label")
+                    return
+            
+            current_file = st.session_state.current_label_file
+            
+            # Progress bar
+            current, total = labeller.get_progress()
+            st.progress(current / total)
+            st.write(f"**Progress: {current} / {total} labels assigned**")
+            
+            # Display current heatmap and image side by side
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("🗺️ Label Heatmap")
+                fig, ax = plt.subplots(figsize=(8, 8))
+                cmap = plt.cm.get_cmap("viridis", 4)
+                im = ax.imshow(labeller.sparse_array, cmap=cmap, vmin=0, vmax=3)
+                
+                # Highlight current position
+                pos = labeller.get_current_position()
+                if pos:
+                    i, j = pos
+                    ax.plot(j, i, marker="s", color="red", markersize=12, 
+                           markeredgewidth=2, markeredgecolor="black")
+                
+                ax.set_title("Current Labelling Progress")
+                ax.axis("off")
+                st.pyplot(fig)
+                plt.close(fig)
+            
+            with col2:
+                st.subheader("🖼️ Current Image")
+                st.write(f"**File:** `{current_file}`")
+                
+                # Load and display image
+                img_path = os.path.join(config["boxed_png_path"], current_file)
+                if os.path.exists(img_path):
+                    img = Image.open(img_path).convert("L")
+                    st.image(img, use_container_width=True)
+                else:
+                    st.error(f"❌ Image not found: {img_path}")
+            
+            # Labelling buttons
+            st.subheader("🏷️ Assign Label")
+            st.write("**Choose the label for this image:**")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🔴 Horizontal Polarisation", key="label_horizontal", use_container_width=True):
+                    save_label(current_file, config["labelling_path"], "horizontal")
+                    labeller.update_sparse_array(1)
+                    st.session_state.current_label_file = None
+                    st.rerun()
+            
+            with col2:
+                if st.button("🟢 Vertical Polarisation", key="label_vertical", use_container_width=True):
+                    save_label(current_file, config["labelling_path"], "vertical")
+                    labeller.update_sparse_array(2)
+                    st.session_state.current_label_file = None
+                    st.rerun()
+            
+            with col3:
+                if st.button("🟡 No Observable Polarisation", key="label_none", use_container_width=True):
+                    save_label(current_file, config["labelling_path"], "na")
+                    labeller.update_sparse_array(3)
+                    st.session_state.current_label_file = None
+                    st.rerun()
+            
+            # Option to reset labelling
+            st.divider()
+            if st.button("🔄 Reset Labelling Session", type="secondary"):
+                st.session_state.labeller_state = None
+                st.session_state.current_label_file = None
+                st.session_state.labelling_initialized = False
+                st.warning("⚠️ Labelling session reset. Note: Previously saved labels in the YAML file are preserved.")
+                st.rerun()
+                
+        except FileNotFoundError as e:
+            st.error(f"❌ Error: {str(e)}")
+            st.info("💡 Make sure you have completed the average boxing step first.")
         except Exception as e:
-            st.error(f"❌ Error starting labelling: {str(e)}")
-
-    # Check if labelling is complete
+            st.error(f"❌ Error during labelling: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
+    # Show existing labels if file exists
     if os.path.exists(config["labelling_path"]):
-        try:
-            with open(config["labelling_path"], "r") as f:
-                labels_data = yaml.safe_load(f)
+        with st.expander("📊 View Existing Labels"):
+            try:
+                labels_data = load_existing_labels(config["labelling_path"])
                 if labels_data and "labels" in labels_data:
                     num_labels = len(labels_data["labels"])
-                    st.success(f"✅ Found {num_labels} labels in the file!")
-                    st.session_state.labelling_done = True
+                    st.write(f"**Total labels saved:** {num_labels}")
+                    
+                    # Show statistics
+                    label_stats = get_label_statistics(config["labelling_path"])
+                    st.write("**Label Distribution:**")
+                    for label, count in label_stats.items():
+                        st.write(f"- {label}: {count}")
+            except Exception as e:
+                st.warning(f"⚠️ Could not read labels file: {str(e)}")
 
-                    # Show some statistics
-                    if st.checkbox("Show label statistics"):
-                        label_counts = {}
-                        for item in labels_data["labels"]:
-                            label = item.get("label", "unknown")
-                            label_counts[label] = label_counts.get(label, 0) + 1
-
-                        st.write("**Label Distribution:**")
-                        for label, count in label_counts.items():
-                            st.write(f"- {label}: {count}")
-
-        except Exception as e:
-            st.warning(f"⚠️ Could not read labels file: {str(e)}")
 
 
 def model_training():
@@ -644,7 +766,7 @@ def inference_results():
             status_text.text("🔮 Running inference...")
             progress_bar.progress(25)
 
-            config_file = f"configs/{config['project_name']}.yaml"
+            config_file = f"{config['project_name']}.yaml"
 
             # Ensure output directory exists
             os.makedirs(config["output_save_path"], exist_ok=True)
@@ -768,6 +890,9 @@ def create_training_config(config):
             "checkpoint_dir": f"{config['project_name']}/",
             "wandb_logging": False,
         },
+        "test": {
+            "load_path": f"{config['project_name']}/",
+        }
     }
 
 

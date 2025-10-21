@@ -181,6 +181,8 @@ def plot_embeddings(
         ABS_PATH, "../checkpoints", _config.test.load_path
     )
 
+    print(route_to_checkpoints)
+
     best_checkpoint = str(os.listdir(route_to_checkpoints)[-1])
     print(f"Best checkpoint: {best_checkpoint}")
 
