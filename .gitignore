@@ -11,8 +11,17 @@ __pycache__/
 .vscode/
 wandb_key.txt
 data/
+images/
+output/
+configs/
+checkpoints/
+labelling/
 
+*.pyc
+*.pyo
+*.pyd
 *.cpython*
+*.csv
 
 # Distribution / packaging
 .Python

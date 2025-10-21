@@ -4,12 +4,14 @@ Complete Streamlit implementation with full workflow integration
 """
 
 import os
+import random
 import sys
 import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+import py4DSTEM
 import streamlit as st
 import yaml
 from PIL import Image
@@ -64,6 +66,8 @@ def initialize_session_state():
         "labeller_state": None,
         "current_label_file": None,
         "labelling_initialized": False,
+        # Inference result
+        "inference_plot_path": None,
     }
 
     for key, value in defaults.items():
@@ -173,7 +177,7 @@ def setup_configuration():
         "Number of Labels",
         min_value=10,
         max_value=1000,
-        value=100,
+        value=50,
         key="number_of_labels",
     )
 
@@ -229,8 +233,8 @@ def setup_configuration():
         try:
             dataset = py4DSTEM.import_file(temp_dm4_path)
             shape = dataset.data.shape  # type: ignore
-            dim1 = shape[0]
-            dim2 = shape[1]
+            dim2 = shape[0]
+            dim1 = shape[1]
             st.write(
                 f"**Real space image dimensions:** {dim1} x {dim2} (scan positions)"
             )
@@ -241,21 +245,41 @@ def setup_configuration():
             st.warning(f"Could not read DM4 file info: {e}")
 
         # Show random diffraction image
-        fig1 = plt.figure(figsize=(8, 8))
         try:
-            show_random_diffraction_pattern(
-                temp_dm4_path, binning_param=1, save_image=False
-            )
+            fig1, ax1 = plt.subplots(figsize=(8, 8))
+            
+            # Load dataset and show random diffraction pattern
+            shape = dataset.data.shape
+            random_i = random.randint(0, shape[0] - 1)
+            random_j = random.randint(0, shape[1] - 1)
+            diffraction_pattern = dataset[random_i, random_j].data
+            
+            ax1.imshow(diffraction_pattern, cmap="gray")
+            ax1.set_title(f"Random Diffraction Pattern at ({random_i}, {random_j})")
+            ax1.set_xlabel("Detector X (pixels)")
+            ax1.set_ylabel("Detector Y (pixels)")
+            plt.colorbar(ax1.images[0], ax=ax1, label="Intensity")
+            
             st.pyplot(fig1)
+            plt.close(fig1)
         except Exception as e:
             st.warning(f"Could not display random diffraction image: {e}")
 
         # Show virtual image
-
-        fig2 = plt.figure(figsize=(8, 8))
         try:
-            show_virtual_image(temp_dm4_path, binning_param=1)
+            fig2, ax2 = plt.subplots(figsize=(8, 8))
+            
+            # Load dataset and create virtual image
+            virtual_image = dataset.data.sum(axis=(2, 3))
+            
+            ax2.imshow(virtual_image, cmap="gray")
+            ax2.set_title("Virtual Image (summed intensity)")
+            ax2.set_xlabel("Scan X")
+            ax2.set_ylabel("Scan Y")
+            plt.colorbar(ax2.images[0], ax=ax2, label="Intensity")
+            
             st.pyplot(fig2)
+            plt.close(fig2)
         except Exception as e:
             st.warning(f"Could not display virtual image: {e}")
 
@@ -268,7 +292,7 @@ def setup_configuration():
         config = {
             "project_name": project_name,
             "dm4_file_path": dm4_file_path,
-            "output_png_path": f"data/png/{project_name}_png",
+            "output_png_path": f"data/png/{project_name}",
             "boxed_png_path": f"data/boxed_png/{project_name}",
             "labelling_path": f"labelling/{project_name}_labels.yaml",
             "output_save_path": f"output/{project_name}/",
@@ -335,11 +359,6 @@ def dm4_conversion():
             status_text = st.empty()
 
             status_text.text("🔄 Converting DM4 to PNG format...")
-            progress_bar.progress(25)
-
-            # Ensure output directory exists
-            os.makedirs(config["output_png_path"], exist_ok=True)
-
             progress_bar.progress(50)
 
             # Call conversion function directly with the file path
@@ -388,20 +407,6 @@ def average_boxing():
         - � Box Size: {config["box_size"]}
         - � Array Length: Auto-detected from filenames
         """)
-
-        # Optional parameters
-        st.subheader("🎛️ Advanced Options")
-        smoothing_type = st.selectbox(
-            "Smoothing Type", ["gamma", "sigmoid"], index=0, key="smoothing_type"
-        )
-        gamma_value = st.slider(
-            "Gamma Correction",
-            min_value=0.1,
-            max_value=3.0,
-            value=1.2,
-            step=0.1,
-            key="gamma_value",
-        )
 
     with col2:
         st.info(f"""
@@ -456,8 +461,6 @@ def average_boxing():
                 stem_image_dir=config["output_png_path"],
                 output_dir=config["boxed_png_path"],
                 box_size=config["box_size"],
-                smoothing=smoothing_type,
-                gamma=gamma_value,
             )
 
             progress_bar.progress(100)
@@ -541,7 +544,7 @@ def data_labelling():
                 st.subheader("📊 Final Label Distribution")
                 fig, ax = plt.subplots(figsize=(10, 10))
                 final_heatmap = labeller.save_final_heatmap()
-                cmap = plt.cm.get_cmap("viridis", 4)
+                cmap = plt.get_cmap("viridis", 4)
                 im = ax.imshow(final_heatmap, cmap=cmap, vmin=0, vmax=3)
                 ax.set_title("Final Label Map")
                 ax.axis("off")
@@ -579,7 +582,7 @@ def data_labelling():
             with col1:
                 st.subheader("🗺️ Label Heatmap")
                 fig, ax = plt.subplots(figsize=(8, 8))
-                cmap = plt.cm.get_cmap("viridis", 4)
+                cmap = plt.get_cmap("viridis", 4)
                 im = ax.imshow(labeller.sparse_array, cmap=cmap, vmin=0, vmax=3)
                 
                 # Highlight current position
@@ -602,7 +605,7 @@ def data_labelling():
                 img_path = os.path.join(config["boxed_png_path"], current_file)
                 if os.path.exists(img_path):
                     img = Image.open(img_path).convert("L")
-                    st.image(img, use_container_width=True)
+                    st.image(img, width="stretch")
                 else:
                     st.error(f"❌ Image not found: {img_path}")
             
@@ -613,21 +616,21 @@ def data_labelling():
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("🔴 Horizontal Polarisation", key="label_horizontal", use_container_width=True):
+                if st.button("🔴 Horizontal Polarisation", key="label_horizontal", width="stretch"):
                     save_label(current_file, config["labelling_path"], "horizontal")
                     labeller.update_sparse_array(1)
                     st.session_state.current_label_file = None
                     st.rerun()
             
             with col2:
-                if st.button("🟢 Vertical Polarisation", key="label_vertical", use_container_width=True):
+                if st.button("🟢 Vertical Polarisation", key="label_vertical", width="stretch"):
                     save_label(current_file, config["labelling_path"], "vertical")
                     labeller.update_sparse_array(2)
                     st.session_state.current_label_file = None
                     st.rerun()
             
             with col3:
-                if st.button("🟡 No Observable Polarisation", key="label_none", use_container_width=True):
+                if st.button("🟡 No Observable Polarisation", key="label_none", width="stretch"):
                     save_label(current_file, config["labelling_path"], "na")
                     labeller.update_sparse_array(3)
                     st.session_state.current_label_file = None
@@ -734,12 +737,135 @@ def model_training():
 
             st.session_state.training_done = True
             st.success("🎉 Model training completed! Ready for inference.")
+            
+            # Display training statistics
+            display_training_stats(config)
 
         except Exception as e:
             st.error(f"❌ Error during training: {str(e)}")
             st.write("**Debugging info:**")
             st.write(f"- Config file path: {config_file_path}")
             st.write(f"- Training config: {training_config}")
+    
+    # Display training statistics if training is complete
+    if st.session_state.training_done:
+        with st.expander("📊 View Training Statistics", expanded=False):
+            display_training_stats(config)
+
+
+def display_training_stats(config):
+    """Display training statistics from PyTorch Lightning logs"""
+    st.subheader("📊 Training Statistics")
+    
+    # Find the most recent lightning logs
+    lightning_logs_dir = "lightning_logs"
+    
+    if not os.path.exists(lightning_logs_dir):
+        st.info("ℹ️ No training logs found yet.")
+        return
+    
+    # Get all version directories and sort by modification time
+    version_dirs = [d for d in os.listdir(lightning_logs_dir) if d.startswith("version_")]
+    if not version_dirs:
+        st.info("ℹ️ No training logs found yet.")
+        return
+    
+    # Get the most recent version directory
+    version_dirs_full = [os.path.join(lightning_logs_dir, d) for d in version_dirs]
+    latest_log_dir = max(version_dirs_full, key=os.path.getmtime)
+    metrics_file = os.path.join(latest_log_dir, "metrics.csv")
+    
+    if not os.path.exists(metrics_file):
+        st.info("ℹ️ No metrics file found yet.")
+        return
+    
+    try:
+        import pandas as pd
+        
+        # Read metrics CSV
+        df = pd.read_csv(metrics_file)
+        
+        # Display key metrics
+        col1, col2, col3 = st.columns(3)
+        
+        # Get final metrics
+        if 'train_loss' in df.columns:
+            final_train_loss = df['train_loss'].dropna().iloc[-1]
+            with col1:
+                st.metric("Final Train Loss", f"{final_train_loss:.4f}")
+        
+        if 'val_loss' in df.columns:
+            final_val_loss = df['val_loss'].dropna().iloc[-1]
+            best_val_loss = df['val_loss'].min()
+            with col2:
+                st.metric("Final Val Loss", f"{final_val_loss:.4f}")
+                st.metric("Best Val Loss", f"{best_val_loss:.4f}")
+        
+        if 'train_acc' in df.columns:
+            final_train_acc = df['train_acc'].dropna().iloc[-1]
+            with col3:
+                st.metric("Final Train Accuracy", f"{final_train_acc:.2%}")
+        
+        if 'val_acc' in df.columns:
+            final_val_acc = df['val_acc'].dropna().iloc[-1]
+            best_val_acc = df['val_acc'].max()
+            with col3:
+                st.metric("Final Val Accuracy", f"{final_val_acc:.2%}")
+                st.metric("Best Val Accuracy", f"{best_val_acc:.2%}")
+        
+        # Plot training curves
+        st.write("### 📈 Training Curves")
+        
+        # Loss plot
+        if 'train_loss' in df.columns or 'val_loss' in df.columns:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            
+            if 'train_loss' in df.columns:
+                train_loss_clean = df[['epoch', 'train_loss']].dropna()
+                ax.plot(train_loss_clean['epoch'], train_loss_clean['train_loss'], 
+                       label='Train Loss', marker='o', markersize=3)
+            
+            if 'val_loss' in df.columns:
+                val_loss_clean = df[['epoch', 'val_loss']].dropna()
+                ax.plot(val_loss_clean['epoch'], val_loss_clean['val_loss'], 
+                       label='Validation Loss', marker='s', markersize=3)
+            
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Loss')
+            ax.set_title('Training and Validation Loss')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close(fig)
+        
+        # Accuracy plot
+        if 'train_acc' in df.columns or 'val_acc' in df.columns:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            
+            if 'train_acc' in df.columns:
+                train_acc_clean = df[['epoch', 'train_acc']].dropna()
+                ax.plot(train_acc_clean['epoch'], train_acc_clean['train_acc'] * 100, 
+                       label='Train Accuracy', marker='o', markersize=3)
+            
+            if 'val_acc' in df.columns:
+                val_acc_clean = df[['epoch', 'val_acc']].dropna()
+                ax.plot(val_acc_clean['epoch'], val_acc_clean['val_acc'] * 100, 
+                       label='Validation Accuracy', marker='s', markersize=3)
+            
+            ax.set_xlabel('Epoch')
+            ax.set_ylabel('Accuracy (%)')
+            ax.set_title('Training and Validation Accuracy')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            st.pyplot(fig)
+            plt.close(fig)
+        
+        # Show full metrics table
+        if st.checkbox("Show detailed metrics table"):
+            st.dataframe(df, use_container_width=True)
+            
+    except Exception as e:
+        st.warning(f"⚠️ Could not load training statistics: {str(e)}")
 
 
 def inference_results():
@@ -757,6 +883,17 @@ def inference_results():
     config = st.session_state.config
 
     st.subheader("🔮 Generate Results")
+    
+    # Add softmax toggle
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        use_softmax = st.checkbox(
+            "Apply Softmax Activation",
+            value=True,
+            help="Apply softmax to the model output for probability distribution. Uncheck for raw logits."
+        )
+    with col2:
+        st.write("")  # Spacing
 
     if st.button("🚀 Run Inference", type="primary"):
         try:
@@ -773,61 +910,61 @@ def inference_results():
 
             progress_bar.progress(50)
 
-            # Call inference function
-            plot_embeddings(
+            # Call inference function and store the returned plot path
+            plot_path = plot_embeddings(
                 config_file,
                 config["dim1"],
                 config["dim2"],
                 save_path=config["output_save_path"],
+                with_softmax=use_softmax,
             )
 
             progress_bar.progress(100)
             status_text.text("✅ Inference completed successfully!")
 
+            # Store the plot path in session state
+            st.session_state.inference_plot_path = plot_path
             st.session_state.inference_done = True
             st.success("🎉 Inference completed!")
 
-            # Display results
-            display_results(config)
-
         except Exception as e:
             st.error(f"❌ Error during inference: {str(e)}")
+    
+    # Display results if inference has been completed
+    if st.session_state.inference_done and st.session_state.inference_plot_path:
+        display_results(st.session_state.inference_plot_path)
 
 
-def display_results(config):
-    """Display generated results"""
-    st.subheader("📈 Results")
+def display_results(plot_path):
+    """Display generated inference results
+    
+    Args:
+        plot_path: Path to the inference result image
+    """
+    st.divider()
+    st.subheader("📈 Inference Results")
 
-    output_dir = config["output_save_path"]
-    if os.path.exists(output_dir):
-        # List all image files
-        image_extensions = (".png", ".jpg", ".jpeg", ".gif", ".bmp")
-        image_files = [
-            f for f in os.listdir(output_dir) if f.lower().endswith(image_extensions)
-        ]
-
-        if image_files:
-            st.write(f"✅ Found {len(image_files)} result images:")
-
-            # Display images in a grid
-            cols = st.columns(min(len(image_files), 3))
-            for i, image_file in enumerate(image_files[:6]):  # Show max 6 images
-                with cols[i % 3]:
-                    image_path = os.path.join(output_dir, image_file)
-                    st.image(image_path, caption=image_file, use_column_width=True)
-
-                    # Download button for each image
-                    with open(image_path, "rb") as file:
-                        st.download_button(
-                            label=f"📥 Download {image_file}",
-                            data=file.read(),
-                            file_name=image_file,
-                            mime="image/png",
-                        )
-        else:
-            st.info("ℹ️ No result images found yet.")
+    if plot_path and os.path.exists(plot_path):
+        st.success(f"✅ Inference completed successfully!")
+        st.write(f"**Output:** `{os.path.basename(plot_path)}`")
+        
+        # Display the inference image in full width
+        st.image(plot_path, width="stretch")
+        
+        # Add download button centered below the image
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            with open(plot_path, "rb") as file:
+                st.download_button(
+                    label=f"📥 Download Result",
+                    data=file,
+                    file_name=os.path.basename(plot_path),
+                    mime="image/png",
+                    width="stretch",
+                    type="primary"
+                )
     else:
-        st.info("ℹ️ Results directory not found.")
+        st.info("ℹ️ No result image found. Run inference to generate results.")
 
 
 def create_training_config(config):

@@ -280,8 +280,6 @@ class StreamlitLabellerState:
         Applies transformations to match original image orientation.
         """
         out_image = self.sparse_array.copy()
-        out_image = np.flip(out_image, axis=0)
-        out_image = np.rot90(out_image, k=3)
         return out_image
     
     def get_current_position(self) -> Optional[Tuple[int, int]]:

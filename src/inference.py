@@ -77,7 +77,8 @@ def output_polarisation_image(
     dim1: int,
     dim2: int,
     save_name=None,
-):
+    with_softmax: bool = True,
+) -> str:
     image_list: list = []
     ex_description = _config.wandb.ex_description
 
@@ -95,28 +96,32 @@ def output_polarisation_image(
     output_list: list = []
 
     model.eval()
-    with torch.no_grad():
-        for image in tqdm(dataloader):
-            image.to(_config.accelerator)
-            output = model(image)
-            # apply softmax to output
-            # output = torch.nn.functional.softmax(output, dim=1)
-            output_list.append(output.cpu())
+
+    if with_softmax:
+        with torch.no_grad():
+            for image in tqdm(dataloader):
+                image.to(_config.accelerator)
+                output = model(image)
+                # apply softmax to output
+                output = torch.nn.functional.softmax(output, dim=1)
+                output_list.append(output.cpu())
+    else:
+        with torch.no_grad():
+            for image in tqdm(dataloader):
+                image.to(_config.accelerator)
+                output = model(image)
+                output_list.append(output.cpu())
 
     all_outputs = np.array(output_list)
 
-    if _config.task == "binary":
-        out_image = all_outputs.reshape((dim2, dim1, 3))
-
-    elif _config.task == "polar":
-        out_image = all_outputs.reshape((dim2, dim1))
+    out_image = all_outputs.reshape((dim1, dim2, 3))
 
     # out_image = np.clip(out_image, 0, 1)
     out_image = (out_image / out_image.max() * 255).astype(np.uint8)  # For scaling
 
     # TODO: fix this vicsious hack that gets around weird bug where it ends up flipped and rotated the wrong way
-    #out_image = np.flip(out_image, axis=0)
-    #out_image = np.rot90(out_image, k=3)
+    out_image = np.flip(out_image, axis=0)
+    out_image = np.rot90(out_image, k=3)
 
     # make sure no spaces in ex_description and compatible with file save name
     ex_description = ex_description.replace(" ", "_")
@@ -146,9 +151,11 @@ def output_polarisation_image(
 
     print(f"Plot saved to {plot_save_path}")
 
+    return plot_save_path
+
 
 def plot_embeddings(
-    config_file: str, dim1: int, dim2: int, save_path: str = "./images/"
+    config_file: str, dim1: int, dim2: int, save_path: str = "./images/", with_softmax: bool = True
 ):
     """
     Description: Extracts the embeddings from the network and plots them to a figure
@@ -193,34 +200,17 @@ def plot_embeddings(
     stem_image_dir = os.path.join(ABS_PATH, "../", _config.data.data_dir)
     assert os.path.exists(stem_image_dir), "Data directory does not exist"
 
-    # check if directory contains folders instead of files
-    print(
-        "Checking if multiple diffraction files exist (so we can do multiple in a row)"
+    plot_path = output_polarisation_image(
+        _config,
+        model,
+        stem_image_dir,
+        save_path,
+        dim1=dim1,
+        dim2=dim2,
+        with_softmax = with_softmax
     )
-    for _, dirs, _ in os.walk(stem_image_dir):
-        if len(dirs) > 0:
-            print("Multiple directories found, so doing each one in turn")
-            for dir in dirs:
-                output_polarisation_image(
-                    _config,
-                    model,
-                    os.path.join(stem_image_dir, dir),
-                    os.path.join("images", dir),
-                    dim1=dim1,
-                    dim2=dim2,
-                    save_name=dir,
-                )
-        else:
-            print("No directories found, so just doing one image")
-            output_polarisation_image(
-                _config,
-                model,
-                stem_image_dir,
-                "images/",
-                dim1=dim1,
-                dim2=dim2,
-            )
 
+    return plot_path
 
 if __name__ == "__main__":
     Fire(plot_embeddings)
