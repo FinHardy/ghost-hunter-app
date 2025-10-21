@@ -10,7 +10,9 @@ __pycache__/
 .DS_Store
 .vscode/
 wandb_key.txt
+data/
 
+*.cpython*
 
 # Distribution / packaging
 .Python

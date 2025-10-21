@@ -40,11 +40,11 @@ def save_dm4_BF_to_png(
 
     if crop:
         output_dir = os.path.join(
-            output_file_path + "_png_cropped" + "_bin" + str(binning_param)
+            output_file_path + "_png_cropped"
         )
     else:
         output_dir = os.path.join(
-            output_file_path + "_png" + "_bin" + str(binning_param)
+            output_file_path + "_png"
         )
 
     os.makedirs(output_dir, exist_ok=True)

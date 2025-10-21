@@ -136,68 +136,81 @@ def setup_configuration():
     """Step 1: Setup and Configuration"""
     st.header("⚙️ Step 1: Setup & Configuration")
 
-    col1, col2 = st.columns(2)
+    st.subheader("Project Name")
+    project_name = st.text_input(
+        "Enter a unique project name",
+        value="my_ghost_hunter_project",
+        key="project_name",
+        help="This will be used to name output directories and files",
+    )
 
-    with col1:
-        st.subheader("📁 Project Settings")
-        project_name = st.text_input(
-            "Project Name", value="my_experiment", key="project_name"
-        )
+    # File path input
+    st.subheader("� Specify DM4 File Path")
+    dm4_file_path = st.text_input(
+        "Enter the full path to your DM4 file",
+        value="",
+        key="dm4_file_path",
+        help="Example: /home/user/data/experiment.dm4"
+    )
 
-        st.subheader("📊 Image Dimensions")
-        dim1 = st.number_input("Height (dim1)", value=512, min_value=1, key="dim1")
-        dim2 = st.number_input("Width (dim2)", value=512, min_value=1, key="dim2")
 
-    with col2:
-        st.subheader("🏷️ Labelling Parameters")
-        sampling_space = st.slider(
-            "Sampling Space", min_value=1, max_value=50, value=10, key="sampling_space"
-        )
-        number_of_labels = st.slider(
-            "Number of Labels",
-            min_value=10,
-            max_value=1000,
-            value=100,
-            key="number_of_labels",
-        )
+    st.subheader("🏷️ Labelling Parameters")
+    sampling_interval = st.slider(
+        "Sampling Interval", min_value=1, max_value=50, value=10, key="sampling_interval"
+    )
+    number_of_labels = st.slider(
+        "Number of Labels",
+        min_value=10,
+        max_value=1000,
+        value=100,
+        key="number_of_labels",
+    )
 
-        st.subheader("📦 Boxing Parameters")
-        box_size = st.slider(
-            "Box Size",
-            min_value=1,
-            max_value=10,
-            value=3,
-            key="box_size",
-            help="Size of the averaging box for creating averaged images",
-        )
+    st.subheader("📦 Boxing Parameters")
+    box_size = st.slider(
+        "Box Size",
+        min_value=1,
+        max_value=5,
+        value=3,
+        key="box_size",
+        help="Size of the averaging box for creating averaged images",
+    )
 
+    st.info(
+        "ℹ️ **Array dimensions will be automatically detected** from your image filenames!"
+    )
+
+    st.subheader("🤖 Training Parameters")
+    max_epochs = st.number_input(
+        "Max Epochs", value=50, min_value=1, key="max_epochs"
+    )
+    batch_size = st.selectbox(
+        "Batch Size", [16, 32, 64, 128], index=1, key="batch_size"
+    )
+    learning_rate = st.number_input(
+        "Learning Rate", value=0.0004, format="%.6f", key="learning_rate"
+    )
+
+
+    
+    # Validate file path
+    dm4_file_valid = False
+    if dm4_file_path:
+        if os.path.exists(dm4_file_path):
+            if dm4_file_path.endswith('.dm4'):
+                dm4_file_valid = True
+                st.success(f"✅ Valid DM4 file: {os.path.basename(dm4_file_path)}")
+            else:
+                st.error("❌ File must have .dm4 extension")
+        else:
+            st.error("❌ File path does not exist")
+
+    # Show DM4 info and images if valid path provided
+    if dm4_file_valid:
         st.info(
-            "ℹ️ **Array dimensions will be automatically detected** from your image filenames!"
+            "Preview: Random diffraction image and virtual image from DM4 file"
         )
-
-        st.subheader("🤖 Training Parameters")
-        max_epochs = st.number_input(
-            "Max Epochs", value=50, min_value=1, key="max_epochs"
-        )
-        batch_size = st.selectbox(
-            "Batch Size", [16, 32, 64, 128], index=1, key="batch_size"
-        )
-        learning_rate = st.number_input(
-            "Learning Rate", value=0.0004, format="%.6f", key="learning_rate"
-        )
-
-    # File upload
-    st.subheader("📤 Upload DM4 File")
-    dm4_file = st.file_uploader("Choose a DM4 file", type=["dm4"], key="dm4_file")
-
-    # Show DM4 info and images if uploaded
-    if dm4_file is not None:
-        st.info(
-            "Preview: Random diffraction image and virtual image from uploaded DM4 file"
-        )
-        temp_dm4_path = os.path.join(st.session_state.temp_dir, dm4_file.name)
-        with open(temp_dm4_path, "wb") as f:
-            f.write(dm4_file.getbuffer())
+        temp_dm4_path = dm4_file_path
 
         # Get dataset info and show dimensions
         import py4DSTEM
@@ -235,17 +248,19 @@ def setup_configuration():
 
     # Save configuration
     if st.button("💾 Save Configuration & Proceed", type="primary"):
+        if not dm4_file_path or not dm4_file_valid:
+            st.error("❌ Please provide a valid DM4 file path!")
+            return
+
         config = {
             "project_name": project_name,
-            "dm4_file": dm4_file,
-            "output_png_path": f"data/png/{project_name}",
+            "dm4_file_path": dm4_file_path,
+            "output_png_path": f"data/png/{project_name}_png",
             "boxed_png_path": f"data/boxed_png/{project_name}",
             "labelling_path": f"labelling/{project_name}_labels.yaml",
             "output_save_path": f"output/{project_name}/",
-            "dim1": dim1,
-            "dim2": dim2,
             "box_size": box_size,
-            "sampling_space": sampling_space,
+            "sampling_space": sampling_interval,
             "number_of_labels": number_of_labels,
             "max_epochs": max_epochs,
             "batch_size": batch_size,
@@ -288,17 +303,17 @@ def dm4_conversion():
         crop_values = (x_min, x_max, y_min, y_max)
 
     if st.button("🚀 Start DM4 Conversion", type="primary"):
-        if config["dm4_file"] is None:
-            st.error("❌ Please upload a DM4 file in Step 1!")
+        if not config.get("dm4_file_path"):
+            st.error("❌ Please provide a valid DM4 file path in Step 1!")
             return
 
         try:
-            # Create temporary file for DM4
-            temp_dm4_path = os.path.join(
-                st.session_state.temp_dir, config["dm4_file"].name
-            )
-            with open(temp_dm4_path, "wb") as f:
-                f.write(config["dm4_file"].getbuffer())
+            # Use the file path directly - no need to copy
+            dm4_file_path = config["dm4_file_path"]
+            
+            if not os.path.exists(dm4_file_path):
+                st.error(f"❌ File not found: {dm4_file_path}")
+                return
 
             # Progress tracking
             progress_bar = st.progress(0)
@@ -312,9 +327,9 @@ def dm4_conversion():
 
             progress_bar.progress(50)
 
-            # Call conversion function
+            # Call conversion function directly with the file path
             save_dm4_BF_to_png(
-                temp_dm4_path,
+                dm4_file_path,
                 config["output_png_path"],
                 crop=crop_images,
                 crop_values=crop_values,
