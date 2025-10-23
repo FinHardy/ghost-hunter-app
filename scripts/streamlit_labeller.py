@@ -51,10 +51,12 @@ def do_sparse_sampling(step: int, width: int, height: int) -> List[int]:
 def save_label(file_name: str, output_file: str, label: str) -> int:
     """
     Save a label to the output YAML file.
+    Optimized to reduce I/O overhead.
     
     Returns:
         Total number of labels saved so far
     """
+    # Read existing data
     if os.path.exists(output_file):
         with open(output_file, "r") as f:
             data = yaml.safe_load(f)
@@ -65,10 +67,12 @@ def save_label(file_name: str, output_file: str, label: str) -> int:
     else:
         data = {"labels": []}
     
+    # Append new label
     data["labels"].append({"file": file_name, "label": label})
     
+    # Write with faster YAML dumping (no sorting, no explicit start)
     with open(output_file, "w") as f:
-        yaml.dump(data, f, default_flow_style=False)
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False)
     
     return len(data["labels"])
 

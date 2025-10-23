@@ -140,8 +140,18 @@ def setup_configuration():
         "Enter a unique project name",
         value="my_ghost_hunter_project",
         key="project_name",
-        help="This will be used to name output directories and files",
+        help="This will be used to name output directories and files. Use only letters, numbers, underscores, and hyphens.",
     )
+    
+    # Validate project name
+    if project_name:
+        import re
+        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+            st.error("❌ Project name should only contain letters, numbers, underscores (_), and hyphens (-). No spaces or special characters.")
+        elif len(project_name) < 3:
+            st.warning("⚠️ Project name should be at least 3 characters long for clarity.")
+        else:
+            st.success(f"✅ Valid project name: `{project_name}`")
     
     # Check if project already exists
     png_path = f"data/png/{project_name}"
@@ -197,13 +207,16 @@ def setup_configuration():
         if os.path.exists(dm4_file_path):
             if dm4_file_path.endswith('.dm4'):
                 dm4_file_valid = True
-                st.success(f"✅ Valid DM4 file: {os.path.basename(dm4_file_path)}")
+                st.success(f"✅ Valid DM4 file: `{os.path.basename(dm4_file_path)}`")
             else:
-                st.error("❌ File must have .dm4 extension")
+                st.error("❌ Invalid file type! Please provide a file with `.dm4` extension.")
+                st.info("💡 Tip: Make sure your file path ends with `.dm4` (e.g., `/path/to/data.dm4`)")
         else:
-            st.error("❌ File path does not exist")
+            st.error(f"❌ File not found at the specified path: `{dm4_file_path}`")
+            st.info("💡 Tips:\n- Check for typos in the file path\n- Use absolute paths (e.g., `/home/user/data.dm4`)\n- Ensure you have read permissions for the file")
     elif not project_exists:
-        st.warning("⚠️ DM4 file path required for new projects")
+        st.warning("⚠️ DM4 file path is required for new projects. Please provide a valid path above.")
+        st.info("💡 If you're loading an existing project, the DM4 file is optional.")
 
     # Show DM4 info and images if valid path provided
     if dm4_file_valid:
@@ -263,6 +276,15 @@ def setup_configuration():
 
     # Save configuration
     if st.button("💾 Save Configuration & Proceed", type="primary"):
+        # Validate project name before proceeding
+        import re
+        if not project_name or len(project_name) < 3:
+            st.error("❌ Please enter a valid project name (at least 3 characters).")
+            return
+        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+            st.error("❌ Project name contains invalid characters. Use only letters, numbers, underscores, and hyphens.")
+            return
+        
         # For existing projects, try to auto-detect dimensions
         n_cols_detected = None
         n_rows_detected = None
@@ -280,7 +302,7 @@ def setup_configuration():
                             n_rows_detected = int(parts[-2]) + 1
                             n_cols_detected = int(parts[-1]) + 1
                         except ValueError:
-                            pass
+                            st.warning("⚠️ Could not auto-detect dimensions from PNG filenames. Please check file naming.")
             
             elif os.path.exists(boxed_path):
                 boxed_files = [f for f in os.listdir(boxed_path) if f.endswith('.png')]
@@ -293,7 +315,7 @@ def setup_configuration():
                             n_rows_detected = int(parts[0]) + 1
                             n_cols_detected = int(parts[1]) + 1
                         except ValueError:
-                            pass
+                            st.warning("⚠️ Could not auto-detect dimensions from boxed filenames. Please check file naming.")
         
         # Use detected dimensions or require DM4 file for new projects
         if n_cols_detected and n_rows_detected:
@@ -301,7 +323,11 @@ def setup_configuration():
             n_rows = n_rows_detected
             st.info(f"✅ Auto-detected dimensions from existing files: {n_cols} x {n_rows}")
         elif not dm4_file_path or not dm4_file_valid:
-            st.error("❌ Please provide a valid DM4 file path for new projects!")
+            st.error("❌ Cannot proceed without valid DM4 file for new projects!")
+            st.info("💡 For new projects: Provide a valid DM4 file path above.\n💡 For existing projects: Make sure PNG or boxed files exist in the project directories.")
+            return
+        elif not hasattr(locals(), 'n_cols') or not hasattr(locals(), 'n_rows'):
+            st.error("❌ Could not determine array dimensions. Please check your DM4 file.")
             return
 
         config = {
@@ -357,40 +383,59 @@ def dm4_conversion():
         st.json(config)
 
     st.subheader("🛠️ Conversion Settings")
-    crop_images = st.checkbox("Crop Images", key="crop_images")
+    crop_images = st.checkbox("Crop Images", key="crop_images", 
+                              help="Enable to crop diffraction patterns to a specific region")
 
     crop_values = None
     if crop_images:
         st.write("**Crop Parameters (x_min, x_max, y_min, y_max):**")
+        st.caption("⚠️ Make sure crop values are within your image dimensions!")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            x_min = st.number_input("X Min", value=0, key="x_min")
+            x_min = st.number_input("X Min", value=0, min_value=0, key="x_min")
         with col2:
-            x_max = st.number_input("X Max", value=512, key="x_max")
+            x_max = st.number_input("X Max", value=512, min_value=1, key="x_max")
         with col3:
-            y_min = st.number_input("Y Min", value=0, key="y_min")
+            y_min = st.number_input("Y Min", value=0, min_value=0, key="y_min")
         with col4:
-            y_max = st.number_input("Y Max", value=512, key="y_max")
+            y_max = st.number_input("Y Max", value=512, min_value=1, key="y_max")
+        
+        # Validate crop values
+        if x_min >= x_max:
+            st.error("❌ X Min must be less than X Max!")
+        if y_min >= y_max:
+            st.error("❌ Y Min must be less than Y Max!")
+        if (x_max - x_min) < 10 or (y_max - y_min) < 10:
+            st.warning("⚠️ Crop region is very small. Make sure this is intentional.")
+        
         crop_values = (x_min, x_max, y_min, y_max)
 
     if st.button("🚀 Start DM4 Conversion", type="primary"):
         if not config.get("dm4_file_path"):
-            st.error("❌ Please provide a valid DM4 file path in Step 1!")
+            st.error("❌ No DM4 file path found in configuration!")
+            st.info("💡 Please go back to Step 1 and provide a valid DM4 file path, then save the configuration.")
             return
+        
+        # Validate crop parameters if cropping is enabled
+        if crop_images:
+            if x_min >= x_max or y_min >= y_max:
+                st.error("❌ Invalid crop parameters! Please fix the values above before proceeding.")
+                return
 
         try:
             # Use the file path directly - no need to copy
             dm4_file_path = config["dm4_file_path"]
             
             if not os.path.exists(dm4_file_path):
-                st.error(f"❌ File not found: {dm4_file_path}")
+                st.error(f"❌ DM4 file not found at: `{dm4_file_path}`")
+                st.info("💡 The file may have been moved or deleted. Please update the path in Step 1.")
                 return
 
             # Progress tracking
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            status_text.text("🔄 Converting DM4 to PNG format...")
+            status_text.text("🔄 Converting DM4 to PNG format... This may take a few minutes.")
             progress_bar.progress(50)
 
             # Call conversion function directly with the file path
@@ -471,8 +516,32 @@ def average_boxing():
         """)
 
     if st.button("🚀 Start Average Boxing", type="primary"):
+        # Validate input directory
+        if not os.path.exists(config["output_png_path"]):
+            st.error(f"❌ Input directory not found: `{config['output_png_path']}`")
+            st.info("💡 Please complete Step 2 (DM4 Conversion) first to generate PNG files.")
+            return
+        
+        # Check for PNG files
+        png_files = [f for f in os.listdir(config["output_png_path"]) if f.endswith('.png')]
+        if len(png_files) == 0:
+            st.error(f"❌ No PNG files found in `{config['output_png_path']}`")
+            st.info("💡 Please complete Step 2 (DM4 Conversion) first to generate PNG files.")
+            return
+        
+        # Validate box size
+        if config["box_size"] < 1:
+            st.error("❌ Box size must be at least 1!")
+            return
+        
+        # Check if output would have enough images
+        expected_output = (config["n_rows"] // config["box_size"]) * (config["n_cols"] // config["box_size"])
+        if expected_output < 10:
+            st.warning(f"⚠️ Box size of {config['box_size']} will result in only {expected_output} output images. Consider using a smaller box size.")
+            if not st.checkbox("I understand and want to proceed anyway", key="confirm_small_output"):
+                return
+        
         try:
-            # Ensure input directory exists and has files
             if not os.path.exists(config["output_png_path"]):
                 st.error(
                     "❌ PNG directory not found! Please complete DM4 conversion first."
@@ -537,14 +606,28 @@ def data_labelling():
     st.header("🏷️ Step 4: Data Labelling")
 
     if not st.session_state.config:
-        st.error("❌ Please complete previous steps first!")
+        st.error("❌ Configuration not found!")
+        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
         return
 
     if not st.session_state.boxing_done:
-        st.warning("⚠️ Please complete average boxing first!")
+        st.warning("⚠️ Boxing step not completed!")
+        st.info("💡 Please complete Step 3 (Average Boxing) before labelling. You need boxed images to label.")
         return
 
     config = st.session_state.config
+    
+    # Check if boxed images exist
+    if not os.path.exists(config["boxed_png_path"]):
+        st.error(f"❌ Boxed images directory not found: `{config['boxed_png_path']}`")
+        st.info("💡 Please complete Step 3 (Average Boxing) to generate boxed images.")
+        return
+    
+    boxed_files = [f for f in os.listdir(config["boxed_png_path"]) if f.endswith('.png')]
+    if len(boxed_files) == 0:
+        st.error(f"❌ No boxed images found in `{config['boxed_png_path']}`")
+        st.info("💡 Please complete Step 3 (Average Boxing) to generate boxed images.")
+        return
 
     # Display configuration
     st.subheader("📋 Labelling Configuration")
@@ -556,7 +639,7 @@ def data_labelling():
         max_value=50, 
         value=config.get("sampling_space", 10), 
         key="sampling_interval",
-        help="Grid spacing for initial sparse sampling"
+        help="Grid spacing for initial sparse sampling. Smaller = more initial labels, longer setup time."
     )
     number_of_labels = st.slider(
         "Number of Labels",
@@ -564,8 +647,23 @@ def data_labelling():
         max_value=1000,
         value=config.get("number_of_labels", 50),
         key="number_of_labels",
-        help="Total number of labels to assign"
+        help="Total number of labels to assign. More labels = better training, but more work."
     )
+    
+    # Validate labelling parameters
+    if number_of_labels > len(boxed_files):
+        st.error(f"❌ Number of labels ({number_of_labels}) exceeds available images ({len(boxed_files)})!")
+        st.info(f"💡 Please reduce the number of labels to {len(boxed_files)} or less.")
+        return
+    
+    # Calculate expected sparse samples
+    expected_sparse = (config["n_rows"] // sampling_interval) * (config["n_cols"] // sampling_interval)
+    if expected_sparse > number_of_labels:
+        st.warning(f"⚠️ Sampling interval ({sampling_interval}) will generate ~{expected_sparse} samples, which exceeds your target of {number_of_labels} labels.")
+        st.info(f"💡 Consider increasing the sampling interval to at least {int(np.sqrt(config['n_rows'] * config['n_cols'] / number_of_labels))} for efficiency.")
+    elif expected_sparse < number_of_labels * 0.3:
+        st.warning(f"⚠️ Sampling interval ({sampling_interval}) will only generate ~{expected_sparse} initial samples. Most labelling will use binary search refinement.")
+        st.info("💡 Consider decreasing the sampling interval for more uniform coverage.")
     
     # Update config with selected parameters
     st.session_state.config["sampling_space"] = sampling_interval
@@ -653,7 +751,7 @@ def data_labelling():
             
             with col1:
                 st.subheader("🗺️ Label Heatmap")
-                fig, ax = plt.subplots(figsize=(8, 8))
+                fig, ax = plt.subplots(figsize=(5, 5))
                 cmap = plt.get_cmap("viridis", 4)
                 im = ax.imshow(labeller.sparse_array, cmap=cmap, vmin=0, vmax=3)
                 
@@ -661,23 +759,24 @@ def data_labelling():
                 pos = labeller.get_current_position()
                 if pos:
                     i, j = pos
-                    ax.plot(j, i, marker="s", color="red", markersize=12, 
+                    ax.plot(j, i, marker="s", color="red", markersize=10, 
                            markeredgewidth=2, markeredgecolor="black")
                 
-                ax.set_title("Current Labelling Progress")
+                ax.set_title("Current Labelling Progress", fontsize=10)
                 ax.axis("off")
-                st.pyplot(fig)
+                plt.tight_layout()
+                st.pyplot(fig, width="stretch")
                 plt.close(fig)
             
             with col2:
                 st.subheader("🖼️ Current Image")
                 st.write(f"**File:** `{current_file}`")
                 
-                # Load and display image
+                # Load and display image with caching
                 img_path = os.path.join(config["boxed_png_path"], current_file)
                 if os.path.exists(img_path):
-                    img = Image.open(img_path).convert("L")
-                    st.image(img, width="stretch")
+                    # Use st.image directly with file path (faster than loading with PIL)
+                    st.image(img_path, width="stretch")
                 else:
                     st.error(f"❌ Image not found: {img_path}")
             
@@ -749,14 +848,58 @@ def model_training():
     st.header("🤖 Step 4: Model Training")
 
     if not st.session_state.config:
-        st.error("❌ Please complete previous steps first!")
+        st.error("❌ Configuration not found!")
+        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
         return
 
     if not st.session_state.labelling_done:
-        st.warning("⚠️ Please complete data labelling first!")
+        st.warning("⚠️ Labelling step not completed!")
+        st.info("💡 Please complete Step 4 (Data Labelling) before training. The model needs labeled data to learn from.")
         return
 
     config = st.session_state.config
+    
+    # Validate labels file exists
+    if not os.path.exists(config["labelling_path"]):
+        st.error(f"❌ Labels file not found: `{config['labelling_path']}`")
+        st.info("💡 Please complete the labelling step to generate the labels file.")
+        return
+    
+    # Check number of labels
+    try:
+        labels_data = load_existing_labels(config["labelling_path"])
+        num_labels = len(labels_data.get("labels", []))
+        
+        if num_labels < 10:
+            st.error(f"❌ Insufficient labels! Found only {num_labels} labels.")
+            st.info("💡 You need at least 10 labels for training. Please complete the labelling step.")
+            return
+        elif num_labels < 30:
+            st.warning(f"⚠️ Low number of labels ({num_labels}). Training may not produce good results.")
+            st.info("💡 Consider labelling more images (recommended: 50+) for better model performance.")
+        else:
+            st.success(f"✅ Found {num_labels} labels - good for training!")
+            
+        # Check label distribution
+        label_stats = get_label_statistics(config["labelling_path"])
+        if len(label_stats) < 2:
+            st.error("❌ Only one label type found! You need at least 2 different label types for classification.")
+            st.info("💡 Please add more diverse labels in the labelling step.")
+            return
+        
+        # Check for imbalanced labels
+        max_count = max(label_stats.values())
+        min_count = min(label_stats.values())
+        if max_count > min_count * 5:
+            st.warning(f"⚠️ Imbalanced label distribution detected! Some labels are 5x more common than others.")
+            st.info("💡 Consider labelling more images of underrepresented classes for better model balance.")
+            with st.expander("View Label Distribution"):
+                for label, count in label_stats.items():
+                    st.write(f"- {label}: {count}")
+                    
+    except Exception as e:
+        st.error(f"❌ Could not validate labels: {str(e)}")
+        return
 
     st.subheader("⚙️ Training Configuration")
     col1, col2 = st.columns(2)
