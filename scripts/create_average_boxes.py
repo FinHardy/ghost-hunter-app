@@ -33,35 +33,35 @@ def logical_sort(file_list):
     return sorted_files, coordinates
 
 
-def infer_array_dimensions(image_list):
-    """
-    Automatically infer array dimensions from image filenames.
+# def infer_array_dimensions(image_list):
+#     """
+#     Automatically infer array dimensions from image filenames.
     
-    Args:
-        image_list (list): List of image file paths
+#     Args:
+#         image_list (list): List of image file paths
         
-    Returns:
-        tuple: (array_length, dim1, dim2) where:
-            - array_length: width of the 2D grid
-            - dim1: maximum x coordinate + 1
-            - dim2: maximum y coordinate + 1
-    """
-    _, coordinates = logical_sort(image_list)
+#     Returns:
+#         tuple: (array_length, dim1, dim2) where:
+#             - array_length: width of the 2D grid
+#             - dim1: maximum x coordinate + 1
+#             - dim2: maximum y coordinate + 1
+#     """
+#     _, coordinates = logical_sort(image_list)
     
-    if not coordinates:
-        raise ValueError("No coordinates found in filenames")
+#     if not coordinates:
+#         raise ValueError("No coordinates found in filenames")
     
-    # Extract x and y coordinates
-    xs, ys = zip(*coordinates)
-    dim1 = max(xs) + 1  # +1 because coordinates are 0-based
-    dim2 = max(ys) + 1
+#     # Extract x and y coordinates
+#     xs, ys = zip(*coordinates)
+#     dim1 = max(xs) + 1  # +1 because coordinates are 0-based
+#     dim2 = max(ys) + 1
     
-    # Array length is typically the width of the grid
-    array_length = dim1
+#     # Array length is typically the width of the grid
+#     array_length = dim1
     
-    print(f"Auto-detected dimensions: {dim1} x {dim2} (array_length: {array_length})")
+#     print(f"Auto-detected dimensions: {dim1} x {dim2} (array_length: {array_length})")
     
-    return array_length, dim1, dim2
+#     return array_length, dim1, dim2
 
 
 def average_vals_image(
@@ -132,7 +132,9 @@ def average_vals_image(
 def max_vals_image(
     box_size: int,
     image_list: list[str],
-    array_width: int,
+    # array_width: int,
+    n_cols: int,
+    n_rows: int,
     starting_x: int,
     starting_y: int,
     to_save: bool = False,
@@ -157,8 +159,8 @@ def max_vals_image(
     """
     max_vals_image = None
 
-    n_rows = len(image_list) // array_width
-    n_cols = array_width
+    # n_rows = len(image_list) // array_width
+    # n_cols = array_width
 
     if starting_x < 0 or starting_y < 0 or starting_x > n_cols or starting_y > n_rows:
         raise ValueError("Starting x and y values bust be inside range of the grid")
@@ -176,8 +178,8 @@ def max_vals_image(
         col_start = max(starting_x - (box_size // 2), 0)
         col_end = min(starting_x + (box_size // 2), n_cols)
 
-        row_start = row_idx * array_width + col_start
-        row_end = row_idx * array_width + col_end
+        row_start = row_idx * n_cols + col_start
+        row_end = row_idx * n_cols + col_end
         image_list_x = image_list[row_start : row_end + 1]
 
         images = [np.array(Image.open(image).convert("L")) for image in image_list_x]
@@ -208,7 +210,7 @@ def max_vals_image(
             os.makedirs(output_dir)
 
         plt.imsave(
-            f"{output_dir}/{starting_x}_{starting_y}_boxsize{box_size}.png",
+            f"{output_dir}/{starting_y}_{starting_x}_boxsize{box_size}.png",
             final_image,
             cmap="gray",
         )
@@ -217,7 +219,7 @@ def max_vals_image(
         plt.show()
 
 
-def convert_all_to_boxes(stem_image_dir, output_dir, box_size, array_length=None, **kwargs):
+def convert_all_to_boxes(stem_image_dir, output_dir, box_size, n_cols, n_rows, **kwargs):
     """
     Convert all images to boxes of size box_size x box_size and save them to the output_dir.
     Automatically detects array dimensions if not provided.
@@ -244,25 +246,26 @@ def convert_all_to_boxes(stem_image_dir, output_dir, box_size, array_length=None
     if not image_list:
         raise ValueError(f"No PNG files found in directory: {stem_image_dir}")
 
-    # Auto-detect array dimensions if not provided
-    if array_length is None:
-        print("Auto-detecting array dimensions from filenames...")
-        array_length, dim1, dim2 = infer_array_dimensions(image_list)
-        print(f"Detected grid: {dim1} x {dim2}, using array_length = {array_length}")
-    else:
-        print(f"Using provided array_length = {array_length}")
+    # # Auto-detect array dimensions if not provided
+    # if array_length is None:
+    #     print("Auto-detecting array dimensions from filenames...")
+    #     array_length, dim1, dim2 = infer_array_dimensions(image_list)
+    #     print(f"Detected grid: {dim1} x {dim2}, using array_length = {array_length}")
+    # else:
+    #     print(f"Using provided array_length = {array_length}")
 
     sorted_image_list, _ = logical_sort(image_list)
 
     print(f"Processing {len(sorted_image_list)} images with box_size={box_size}")
 
     for i in tqdm(range(len(sorted_image_list)), desc="Creating boxed images"):
-        row = i // array_length
-        col = i % array_length
+        row = i // n_cols
+        col = i % n_cols
         max_vals_image(
             box_size,
             sorted_image_list,
-            array_length,
+            n_cols,
+            n_rows, 
             col,
             row,
             to_save=True,
@@ -271,30 +274,3 @@ def convert_all_to_boxes(stem_image_dir, output_dir, box_size, array_length=None
             gamma=kwargs.get("gamma", 1.2),
         )
 
-
-if __name__ == "__main__":
-    for frame in range(6, 9):
-        for N in range(9):
-            box_size = 3
-
-            stem_image_dir = os.path.normpath(
-                os.path.join(ABS_PATH, f"../data/InSitu_({frame})/png/frame_{N}_png_cropped_bin1")
-            )
-
-            if not os.path.exists(stem_image_dir):
-                raise FileNotFoundError(f"Directory {stem_image_dir} does not exist.")
-            output_dir = os.path.normpath(
-                os.path.join(
-                    ABS_PATH, f"../data/InSitu_({frame})/boxed_png/frame_{N}_boxed{box_size}_bin1"
-                )
-            )
-
-            smoothing = "gamma"
-            gamma = 1
-            convert_all_to_boxes(
-                stem_image_dir,
-                output_dir,
-                box_size=box_size,
-                smoothing=smoothing,
-                gamma=gamma,
-            )

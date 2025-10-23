@@ -54,31 +54,14 @@ def save_dm4_BF_to_png(
         # TODO: put *args in the function signature
         if crop:
             image = image.crop_Q(crop_values)
-        for i in tqdm(range(shape[0])):
-            for j in range(shape[1]):
-                diffraction_pattern = image[i, j].data
+        for row in tqdm(range(shape[0])):
+            for col in range(shape[1]):
+                diffraction_pattern = image[row, col].data
                 # TODO: i think this is a bug and the i and j are the wrong way around which is what
                 # causes the images to be flipped weirdly at inference time
-                filename = os.path.join(output_dir, f"{base_file_name}_{i}_{j}.png")
+                filename = os.path.join(output_dir, f"{base_file_name}_{row}_{col}.png")
                 plt.imsave(filename, diffraction_pattern, cmap="gray")
 
     except Exception as e:
         # if not 4d STEM image, will get caught here e.g. dm4 files that only show ADF images
         print(e)
-
-
-if __name__ == "__main__":
-    ABS_PATH = os.path.abspath(os.path.dirname(__file__))
-    crop_values = (200, 350, 200, 350)
-    save_dm4_BF_to_png(
-        dm4_file=os.path.join(
-            ABS_PATH,
-            "../../data/mariana_boracite-2025-06-25/InSitu10/SI_Diffraction.dm4",
-        ),
-        output_file_path=os.path.join(
-            ABS_PATH, "../../data/mariana_boracite-2025-06-25/InSitu10/pngs"
-        ),
-        crop=True,
-        binning_param=1,
-        crop_values=crop_values,
-    )

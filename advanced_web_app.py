@@ -142,41 +142,40 @@ def setup_configuration():
         key="project_name",
         help="This will be used to name output directories and files",
     )
+    
+    # Check if project already exists
+    png_path = f"data/png/{project_name}"
+    boxed_path = f"data/boxed_png/{project_name}"
+    project_exists = os.path.exists(png_path) or os.path.exists(boxed_path)
+    
+    if project_exists:
+        st.info(f"ℹ️ **Existing project detected!** If PNG files and/or boxed images already exist for '{project_name}', you can skip those steps and proceed directly to labelling or training.")
+        
+        # Show what exists
+        png_exists = os.path.exists(png_path) and len([f for f in os.listdir(png_path) if f.endswith('.png')]) > 0
+        boxed_exists = os.path.exists(boxed_path) and len([f for f in os.listdir(boxed_path) if f.endswith('.png')]) > 0
+        
+        if png_exists:
+            png_count = len([f for f in os.listdir(png_path) if f.endswith('.png')])
+            st.success(f"✅ Found {png_count} PNG files in `{png_path}`")
+        
+        if boxed_exists:
+            boxed_count = len([f for f in os.listdir(boxed_path) if f.endswith('.png')])
+            st.success(f"✅ Found {boxed_count} boxed images in `{boxed_path}`")
 
     # File path input
-    st.subheader("� Specify DM4 File Path")
+    st.subheader("📁 Specify DM4 File Path")
+    
+    # Make DM4 optional if project exists
+    help_text = "Example: /home/user/data/experiment.dm4"
+    if project_exists:
+        help_text += " (Optional for existing projects - leave blank to skip conversion steps)"
+    
     dm4_file_path = st.text_input(
         "Enter the full path to your DM4 file",
         value="",
         key="dm4_file_path",
-        help="Example: /home/user/data/experiment.dm4"
-    )
-
-
-    st.subheader("🏷️ Labelling Parameters")
-    sampling_interval = st.slider(
-        "Sampling Interval", min_value=1, max_value=50, value=10, key="sampling_interval"
-    )
-    number_of_labels = st.slider(
-        "Number of Labels",
-        min_value=10,
-        max_value=1000,
-        value=50,
-        key="number_of_labels",
-    )
-
-    st.subheader("📦 Boxing Parameters")
-    box_size = st.slider(
-        "Box Size",
-        min_value=1,
-        max_value=5,
-        value=3,
-        key="box_size",
-        help="Size of the averaging box for creating averaged images",
-    )
-
-    st.info(
-        "ℹ️ **Array dimensions will be automatically detected** from your image filenames!"
+        help=help_text
     )
 
     st.subheader("🤖 Training Parameters")
@@ -192,7 +191,7 @@ def setup_configuration():
 
 
     
-    # Validate file path
+    # Validate file path (optional for existing projects)
     dm4_file_valid = False
     if dm4_file_path:
         if os.path.exists(dm4_file_path):
@@ -203,6 +202,8 @@ def setup_configuration():
                 st.error("❌ File must have .dm4 extension")
         else:
             st.error("❌ File path does not exist")
+    elif not project_exists:
+        st.warning("⚠️ DM4 file path required for new projects")
 
     # Show DM4 info and images if valid path provided
     if dm4_file_valid:
@@ -217,20 +218,21 @@ def setup_configuration():
         try:
             dataset = py4DSTEM.import_file(temp_dm4_path)
             shape = dataset.data.shape  # type: ignore
-            dim2 = shape[0]
-            dim1 = shape[1]
+            n_rows = shape[0]
+            n_cols = shape[1]
             st.write(
-                f"**Real space image dimensions:** {dim1} x {dim2} (scan positions)"
+                f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
             )
             st.write(
-                f"**Diffraction pattern size:** {dim1} x {dim2} (detector pixels)"
+                f"**Diffraction pattern size:** {n_cols} x {n_rows} (detector pixels)"
             )
         except Exception as e:
             st.warning(f"Could not read DM4 file info: {e}")
 
-        # Show random diffraction image
+        # Show random diffraction image and virtual image side by side
         try:
-            fig1, ax1 = plt.subplots(figsize=(8, 8))
+            # Create a figure with two subplots side by side
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
             
             # Load dataset and show random diffraction pattern
             shape = dataset.data.shape
@@ -238,60 +240,106 @@ def setup_configuration():
             random_j = random.randint(0, shape[1] - 1)
             diffraction_pattern = dataset[random_i, random_j].data
             
-            ax1.imshow(diffraction_pattern, cmap="gray")
-            ax1.set_title(f"Random Diffraction Pattern at ({random_i}, {random_j})")
+            im1 = ax1.imshow(diffraction_pattern, cmap="gray")
+            ax1.set_title(f"Random Diffraction Pattern\nat ({random_i}, {random_j})")
             ax1.set_xlabel("Detector X (pixels)")
             ax1.set_ylabel("Detector Y (pixels)")
-            plt.colorbar(ax1.images[0], ax=ax1, label="Intensity")
+            plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
             
-            st.pyplot(fig1)
-            plt.close(fig1)
-        except Exception as e:
-            st.warning(f"Could not display random diffraction image: {e}")
-
-        # Show virtual image
-        try:
-            fig2, ax2 = plt.subplots(figsize=(8, 8))
-            
-            # Load dataset and create virtual image
+            # Create virtual image
             virtual_image = dataset.data.sum(axis=(2, 3))
             
-            ax2.imshow(virtual_image, cmap="gray")
-            ax2.set_title("Virtual Image (summed intensity)")
+            im2 = ax2.imshow(virtual_image, cmap="gray")
+            ax2.set_title("Virtual Image\n(summed intensity)")
             ax2.set_xlabel("Scan X")
             ax2.set_ylabel("Scan Y")
-            plt.colorbar(ax2.images[0], ax=ax2, label="Intensity")
+            plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
             
-            st.pyplot(fig2)
-            plt.close(fig2)
+            plt.tight_layout()
+            st.pyplot(fig, width='content')
+            plt.close(fig)
         except Exception as e:
-            st.warning(f"Could not display virtual image: {e}")
+            st.warning(f"Could not display images: {e}")
 
     # Save configuration
     if st.button("💾 Save Configuration & Proceed", type="primary"):
-        if not dm4_file_path or not dm4_file_valid:
-            st.error("❌ Please provide a valid DM4 file path!")
+        # For existing projects, try to auto-detect dimensions
+        n_cols_detected = None
+        n_rows_detected = None
+        
+        if project_exists:
+            # Try to get dimensions from existing files
+            if os.path.exists(png_path):
+                png_files = [f for f in os.listdir(png_path) if f.endswith('.png')]
+                if png_files:
+                    # Get dimensions from last file
+                    last_file = sorted(png_files)[-1]
+                    parts = last_file.replace('.png', '').split('_')
+                    if len(parts) >= 3:  # base_row_col format
+                        try:
+                            n_rows_detected = int(parts[-2]) + 1
+                            n_cols_detected = int(parts[-1]) + 1
+                        except ValueError:
+                            pass
+            
+            elif os.path.exists(boxed_path):
+                boxed_files = [f for f in os.listdir(boxed_path) if f.endswith('.png')]
+                if boxed_files:
+                    # Get dimensions from last boxed file
+                    last_file = sorted(boxed_files)[-1]
+                    parts = last_file.replace('.png', '').split('_')
+                    if len(parts) >= 2:  # row_col_boxsize format
+                        try:
+                            n_rows_detected = int(parts[0]) + 1
+                            n_cols_detected = int(parts[1]) + 1
+                        except ValueError:
+                            pass
+        
+        # Use detected dimensions or require DM4 file for new projects
+        if n_cols_detected and n_rows_detected:
+            n_cols = n_cols_detected
+            n_rows = n_rows_detected
+            st.info(f"✅ Auto-detected dimensions from existing files: {n_cols} x {n_rows}")
+        elif not dm4_file_path or not dm4_file_valid:
+            st.error("❌ Please provide a valid DM4 file path for new projects!")
             return
 
         config = {
             "project_name": project_name,
-            "dm4_file_path": dm4_file_path,
+            "dm4_file_path": dm4_file_path if dm4_file_valid else "",
             "output_png_path": f"data/png/{project_name}",
             "boxed_png_path": f"data/boxed_png/{project_name}",
             "labelling_path": f"labelling/{project_name}_labels.yaml",
             "output_save_path": f"output/{project_name}/",
-            "dim1": dim1,
-            "dim2": dim2,
-            "box_size": box_size,
-            "sampling_space": sampling_interval,
-            "number_of_labels": number_of_labels,
+            "n_cols": n_cols,
+            "n_rows": n_rows,
+            "box_size": 3,  # Default, will be set in boxing section
+            "sampling_space": 10,  # Default, will be set in labelling section
+            "number_of_labels": 50,  # Default, will be set in labelling section
             "max_epochs": max_epochs,
             "batch_size": batch_size,
             "learning_rate": learning_rate,
         }
         st.session_state.config = config
+        
+        # Auto-mark steps as done if files exist
+        if project_exists:
+            png_exists = os.path.exists(png_path) and len([f for f in os.listdir(png_path) if f.endswith('.png')]) > 0
+            boxed_exists = os.path.exists(boxed_path) and len([f for f in os.listdir(boxed_path) if f.endswith('.png')]) > 0
+            
+            if png_exists:
+                st.session_state.conversion_done = True
+            if boxed_exists:
+                st.session_state.boxing_done = True
+        
         st.success("✅ Configuration saved successfully!")
-        st.info("👉 You can now proceed to Step 2: DM4 Conversion")
+        
+        if st.session_state.conversion_done and st.session_state.boxing_done:
+            st.info("👉 Existing project loaded! You can proceed directly to Step 4: Data Labelling")
+        elif st.session_state.conversion_done:
+            st.info("👉 PNG files found! You can proceed to Step 3: Average Boxing")
+        else:
+            st.info("👉 You can now proceed to Step 2: DM4 Conversion")
 
 
 def dm4_conversion():
@@ -382,6 +430,20 @@ def average_boxing():
         st.json(config)
 
     st.subheader("📦 Boxing Configuration")
+    
+    # Box size slider
+    box_size = st.slider(
+        "Box Size",
+        min_value=1,
+        max_value=5,
+        value=config.get("box_size", 3),
+        key="box_size_slider",
+        help="Size of the averaging box for creating averaged images",
+    )
+    
+    # Update config with selected box size
+    st.session_state.config["box_size"] = box_size
+    
     col1, col2 = st.columns(2)
 
     with col1:
@@ -445,6 +507,8 @@ def average_boxing():
                 stem_image_dir=config["output_png_path"],
                 output_dir=config["boxed_png_path"],
                 box_size=config["box_size"],
+                n_cols=config["n_cols"],
+                n_rows=config["n_rows"],
             )
 
             progress_bar.progress(100)
@@ -484,6 +548,29 @@ def data_labelling():
 
     # Display configuration
     st.subheader("📋 Labelling Configuration")
+    
+    # Labelling parameter sliders
+    sampling_interval = st.slider(
+        "Sampling Interval", 
+        min_value=1, 
+        max_value=50, 
+        value=config.get("sampling_space", 10), 
+        key="sampling_interval",
+        help="Grid spacing for initial sparse sampling"
+    )
+    number_of_labels = st.slider(
+        "Number of Labels",
+        min_value=10,
+        max_value=1000,
+        value=config.get("number_of_labels", 50),
+        key="number_of_labels",
+        help="Total number of labels to assign"
+    )
+    
+    # Update config with selected parameters
+    st.session_state.config["sampling_space"] = sampling_interval
+    st.session_state.config["number_of_labels"] = number_of_labels
+    
     col1, col2 = st.columns(2)
 
     with col1:
@@ -526,14 +613,15 @@ def data_labelling():
                 
                 # Show final heatmap
                 st.subheader("📊 Final Label Distribution")
-                fig, ax = plt.subplots(figsize=(10, 10))
+                fig, ax = plt.subplots(figsize=(8, 6))
                 final_heatmap = labeller.save_final_heatmap()
                 cmap = plt.get_cmap("viridis", 4)
                 im = ax.imshow(final_heatmap, cmap=cmap, vmin=0, vmax=3)
                 ax.set_title("Final Label Map")
                 ax.axis("off")
-                plt.colorbar(im, ax=ax, ticks=[0, 1, 2, 3], label="Label")
-                st.pyplot(fig)
+                plt.colorbar(im, ax=ax, ticks=["No Label", "Horizontal", "Vertical", "No Polarisation"], label="Label", fraction=0.046)
+                plt.tight_layout()
+                st.pyplot(fig, use_container_width=False)
                 plt.close(fig)
                 
                 # Show statistics
@@ -897,8 +985,8 @@ def inference_results():
             # Call inference function and store the returned plot path
             plot_path = plot_embeddings(
                 config_file,
-                config["dim1"],
-                config["dim2"],
+                config["n_cols"],
+                config["n_rows"],
                 save_path=config["output_save_path"],
                 with_softmax=use_softmax,
             )
