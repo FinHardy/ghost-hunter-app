@@ -85,29 +85,9 @@ def main():
         "**Transform DM4 files → Label data → Train models → Generate insights**"
     )
 
-    # Sidebar navigation
+    # Sidebar with status indicators
     with st.sidebar:
-        st.title("🚀 Pipeline Steps")
-
-        # Step selection
-        steps = [
-            "1️⃣ Setup & Configuration",
-            "2️⃣ DM4 to PNG Conversion",
-            "3️⃣ Average Boxing",
-            "4️⃣ Data Labelling",
-            "5️⃣ Model Training",
-            "6️⃣ Inference & Results",
-        ]
-
-        selected_step = st.selectbox(
-            "Choose step:", steps, index=st.session_state.step - 1
-        )
-        st.session_state.step = steps.index(selected_step) + 1  # type: ignore
-
-        # Progress indicator
-        progress = st.session_state.step / 6
-        st.progress(progress)
-        st.write(f"Progress: {st.session_state.step}/6 steps")
+        st.title("🚀 Pipeline Status")
 
         # Status indicators
         st.write("### Status")
@@ -132,19 +112,23 @@ def main():
         for status in status_icons.values():
             st.write(status)
 
-    # Route to appropriate page
-    if st.session_state.step == 1:
-        setup_configuration()
-    elif st.session_state.step == 2:
-        dm4_conversion()
-    elif st.session_state.step == 3:
-        average_boxing()
-    elif st.session_state.step == 4:
-        data_labelling()
-    elif st.session_state.step == 5:
-        model_training()
-    elif st.session_state.step == 6:
-        inference_results()
+    # Display all sections on one page
+    setup_configuration()
+    st.divider()
+    
+    dm4_conversion()
+    st.divider()
+    
+    average_boxing()
+    st.divider()
+    
+    data_labelling()
+    st.divider()
+    
+    model_training()
+    st.divider()
+    
+    inference_results()
 
 
 def setup_configuration():
