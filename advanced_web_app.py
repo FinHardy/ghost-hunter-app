@@ -134,24 +134,115 @@ def main():
 def setup_configuration():
     """Step 1: Setup and Configuration"""
     st.header("⚙️ Step 1: Setup & Configuration")
-
-    st.subheader("Project Name")
-    project_name = st.text_input(
-        "Enter a unique project name",
-        value="my_ghost_hunter_project",
-        key="project_name",
-        help="This will be used to name output directories and files. Use only letters, numbers, underscores, and hyphens.",
-    )
     
-    # Validate project name
-    if project_name:
-        import re
-        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
-            st.error("❌ Project name should only contain letters, numbers, underscores (_), and hyphens (-). No spaces or special characters.")
-        elif len(project_name) < 3:
-            st.warning("⚠️ Project name should be at least 3 characters long for clarity.")
+    # Create two columns for new project vs existing project
+    st.subheader("Choose Your Path")
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("### 🆕 Create New Project")
+        st.caption("Start a fresh project from scratch")
+        
+        project_name = st.text_input(
+            "Enter a unique project name",
+            value="my_ghost_hunter_project",
+            key="project_name_new",
+            help="Use only letters, numbers, underscores, and hyphens.",
+        )
+        
+        # Validate project name
+        project_name_valid = False
+        if project_name:
+            import re
+            if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+                st.error("❌ Invalid characters in name")
+            elif len(project_name) < 3:
+                st.warning("⚠️ Name too short (min 3 chars)")
+            else:
+                st.success(f"✅ Valid name")
+                project_name_valid = True
+        
+        use_new_project = st.checkbox("Use this new project", key="use_new", value=True)
+    
+    with col_right:
+        st.markdown("### 📂 Load Existing Project")
+        st.caption("Continue working on a previous project")
+        
+        # Get existing config files
+        configs_dir = "configs"
+        existing_configs = []
+        if os.path.exists(configs_dir):
+            existing_configs = [f.replace('.yaml', '') for f in os.listdir(configs_dir) 
+                              if f.endswith('.yaml') and not f.startswith('.')]
+        
+        if existing_configs:
+            selected_config = st.selectbox(
+                "Select an existing project",
+                options=[""] + sorted(existing_configs),
+                key="existing_project_select",
+                help="Choose from previously created projects"
+            )
+            
+            if selected_config:
+                st.success(f"✅ Selected: `{selected_config}`")
+                # Load the config to show summary
+                try:
+                    config_path = os.path.join(configs_dir, f"{selected_config}.yaml")
+                    with open(config_path, 'r') as f:
+                        loaded_config = yaml.safe_load(f)
+                    
+                    with st.expander("📋 Project Info"):
+                        # Display data configuration
+                        if 'data' in loaded_config:
+                            st.markdown("**📁 Data Configuration:**")
+                            data_config = loaded_config['data']
+                            st.write(f"- Data Directory: `{data_config.get('data_dir', 'N/A')}`")
+                            st.write(f"- Image Size: {data_config.get('image_size', 'N/A')}px")
+                            st.write(f"- Labels File: `{data_config.get('labels_file', 'N/A')}`")
+                            st.write(f"- Train/Val/Test: {data_config.get('train_ratio', 'N/A')}/{data_config.get('val_ratio', 'N/A')}/{data_config.get('test_ratio', 'N/A')}")
+                        
+                        # Display model configuration
+                        if 'model' in loaded_config:
+                            st.markdown("**🧠 Model Configuration:**")
+                            model_config = loaded_config['model']
+                            st.write(f"- Model: {model_config.get('model_name', 'N/A')}")
+                            st.write(f"- Batch Size: {model_config.get('batch_size', 'N/A')}")
+                            st.write(f"- Channels: {model_config.get('in_channels', 'N/A')}")
+                        
+                        # Display training configuration
+                        st.markdown("**⚙️ Training Configuration:**")
+                        st.write(f"- Device: {loaded_config.get('accelerator', 'N/A').upper()}")
+                        st.write(f"- Task: {loaded_config.get('task', 'N/A')}")
+                        
+                        if 'optimizer' in loaded_config:
+                            opt_config = loaded_config['optimizer']
+                            st.write(f"- Optimizer: {opt_config.get('optimizer', 'N/A')}")
+                            st.write(f"- Learning Rate: {opt_config.get('lr', 'N/A')}")
+                            st.write(f"- Weight Decay: {opt_config.get('weight_decay', 'N/A')}")
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ Could not load config details: {str(e)}")
+            
+            use_existing_project = st.checkbox("Use this existing project", key="use_existing", value=False)
         else:
-            st.success(f"✅ Valid project name: `{project_name}`")
+            st.info("ℹ️ No existing projects found")
+            st.caption("Create a new project to get started")
+            selected_config = None
+            use_existing_project = False
+    
+    st.divider()
+    
+    # Determine which project to use
+    if use_existing_project and selected_config:
+        project_name = selected_config
+        st.info(f"🔄 Loading existing project: **{project_name}**")
+        load_from_config = True
+    elif use_new_project and project_name_valid:
+        st.info(f"🆕 Creating new project: **{project_name}**")
+        load_from_config = False
+    else:
+        st.warning("⚠️ Please select either a new project name or an existing project to continue.")
+        return
     
     # Check if project already exists
     png_path = f"data/png/{project_name}"
@@ -189,14 +280,80 @@ def setup_configuration():
     )
 
     st.subheader("🤖 Training Parameters")
+    
+    # Load defaults from existing config if available
+    default_device = "cpu"
+    default_epochs = 50
+    default_batch_size = 32
+    default_lr = 0.0004
+    
+    if load_from_config and selected_config:
+        try:
+            config_path = os.path.join("configs", f"{selected_config}.yaml")
+            with open(config_path, 'r') as f:
+                loaded_config = yaml.safe_load(f)
+            
+            default_device = loaded_config.get("accelerator", "cpu")
+            if 'model' in loaded_config:
+                default_batch_size = loaded_config['model'].get('batch_size', 32)
+            if 'optimizer' in loaded_config:
+                default_lr = loaded_config['optimizer'].get('lr', 0.0004)
+            
+            st.caption("ℹ️ Using parameters from existing config (you can modify them below)")
+        except Exception as e:
+            st.warning(f"⚠️ Could not load all parameters from config: {str(e)}")
+    
+    # Device selection
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        device_options = ["cpu", "cuda", "mps"]
+        device_descriptions = {
+            "cpu": "CPU - Compatible with all systems (slower)",
+            "cuda": "CUDA - NVIDIA GPU acceleration (fastest, requires CUDA)",
+            "mps": "MPS - Apple Silicon GPU acceleration (M1/M2 Macs)"
+        }
+        
+        # Set default index based on loaded config
+        default_device_index = device_options.index(default_device) if default_device in device_options else 0
+        
+        device = st.selectbox(
+            "Training Device",
+            options=device_options,
+            index=default_device_index,
+            format_func=lambda x: device_descriptions[x],
+            key="device_select",
+            help="Select the device for model training. CUDA requires NVIDIA GPU, MPS requires Apple Silicon."
+        )
+    
+    with col2:
+        # Device availability check
+        try:
+            import torch
+            if device == "cuda" and not torch.cuda.is_available():
+                st.warning("⚠️ CUDA not available")
+            elif device == "mps" and not torch.backends.mps.is_available():
+                st.warning("⚠️ MPS not available")
+            else:
+                st.success(f"✅ {device.upper()} ready")
+        except ImportError:
+            st.info("ℹ️ Install PyTorch to check device availability")
+    
     max_epochs = st.number_input(
-        "Max Epochs", value=50, min_value=1, key="max_epochs"
+        "Max Epochs", value=default_epochs, min_value=1, key="max_epochs",
+        help="Number of complete passes through the training data"
     )
+    
+    # Set default batch size index
+    batch_size_options = [16, 32, 64, 128]
+    default_batch_index = batch_size_options.index(default_batch_size) if default_batch_size in batch_size_options else 1
+    
     batch_size = st.selectbox(
-        "Batch Size", [16, 32, 64, 128], index=1, key="batch_size"
+        "Batch Size", batch_size_options, index=default_batch_index, key="batch_size",
+        help="Number of samples processed together. Larger = faster but needs more memory"
     )
     learning_rate = st.number_input(
-        "Learning Rate", value=0.0004, format="%.6f", key="learning_rate"
+        "Learning Rate", value=default_lr, format="%.6f", key="learning_rate",
+        help="Step size for model weight updates. Typical range: 0.0001 - 0.001"
     )
 
 
@@ -345,6 +502,7 @@ def setup_configuration():
             "max_epochs": max_epochs,
             "batch_size": batch_size,
             "learning_rate": learning_rate,
+            "device": device,  # Training device (cpu, cuda, mps)
         }
         st.session_state.config = config
         
@@ -357,11 +515,36 @@ def setup_configuration():
                 st.session_state.conversion_done = True
             if boxed_exists:
                 st.session_state.boxing_done = True
+            
+            # Check for completed labelling file
+            labelling_path = config["labelling_path"]
+            if os.path.exists(labelling_path):
+                try:
+                    labels_data = load_existing_labels(labelling_path)
+                    num_labels = len(labels_data.get("labels", []))
+                    if num_labels >= config["number_of_labels"]:
+                        st.session_state.labelling_done = True
+                        st.success(f"✅ Found completed labelling file with {num_labels} labels")
+                except Exception as e:
+                    pass
+            
+            # Check for model checkpoint
+            checkpoint_dir = f"checkpoints/{project_name}"
+            if os.path.exists(checkpoint_dir):
+                checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+                if checkpoint_files:
+                    st.session_state.training_done = True
+                    st.success(f"✅ Found {len(checkpoint_files)} model checkpoint(s)")
         
         st.success("✅ Configuration saved successfully!")
         
-        if st.session_state.conversion_done and st.session_state.boxing_done:
-            st.info("👉 Existing project loaded! You can proceed directly to Step 4: Data Labelling")
+        # Provide navigation guidance based on what exists
+        if st.session_state.training_done:
+            st.info("👉 Existing model checkpoints found! You can proceed directly to Step 6: Inference")
+        elif st.session_state.labelling_done:
+            st.info("👉 Labelling completed! You can proceed to Step 5: Model Training")
+        elif st.session_state.conversion_done and st.session_state.boxing_done:
+            st.info("👉 Existing project loaded! You can proceed to Step 4: Data Labelling")
         elif st.session_state.conversion_done:
             st.info("👉 PNG files found! You can proceed to Step 3: Average Boxing")
         else:
@@ -628,6 +811,16 @@ def data_labelling():
         st.error(f"❌ No boxed images found in `{config['boxed_png_path']}`")
         st.info("💡 Please complete Step 3 (Average Boxing) to generate boxed images.")
         return
+    
+    # Check if labelling is already complete
+    if os.path.exists(config["labelling_path"]):
+        try:
+            labels_data = load_existing_labels(config["labelling_path"])
+            existing_num_labels = len(labels_data.get("labels", []))
+            if existing_num_labels > 0:
+                st.info(f"ℹ️ Found existing labels file with {existing_num_labels} labels. You can continue labelling or proceed to training if complete.")
+        except Exception:
+            pass
 
     # Display configuration
     st.subheader("📋 Labelling Configuration")
@@ -852,17 +1045,16 @@ def model_training():
         st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
         return
 
-    if not st.session_state.labelling_done:
-        st.warning("⚠️ Labelling step not completed!")
-        st.info("💡 Please complete Step 4 (Data Labelling) before training. The model needs labeled data to learn from.")
-        return
-
     config = st.session_state.config
     
-    # Validate labels file exists
+    # Validate labels file exists (more lenient - check file, not just session state)
     if not os.path.exists(config["labelling_path"]):
         st.error(f"❌ Labels file not found: `{config['labelling_path']}`")
-        st.info("💡 Please complete the labelling step to generate the labels file.")
+        st.info("💡 Please complete Step 4 (Data Labelling) to generate the labels file.")
+        
+        # Still show warning about session state if that's the issue
+        if not st.session_state.labelling_done:
+            st.warning("⚠️ Labelling step not marked as complete in this session.")
         return
     
     # Check number of labels
@@ -908,6 +1100,7 @@ def model_training():
         st.info(f"""
         **Model Settings:**
         - 🧠 Model: ThreeLayerCnn
+        - �️ Device: {config.get("device", "cpu").upper()}
         - 📊 Max Epochs: {config["max_epochs"]}
         - 📦 Batch Size: {config["batch_size"]}
         - 📈 Learning Rate: {config["learning_rate"]}
@@ -923,6 +1116,22 @@ def model_training():
         """)
 
     if st.button("🚀 Start Model Training", type="primary"):
+        # Validate device availability before training
+        selected_device = config.get("device", "cpu")
+        try:
+            import torch
+            if selected_device == "cuda" and not torch.cuda.is_available():
+                st.error("❌ CUDA device selected but not available!")
+                st.info("💡 Options:\n- Install CUDA and PyTorch with CUDA support\n- Change device to 'cpu' in Step 1 and re-save configuration")
+                return
+            elif selected_device == "mps" and not torch.backends.mps.is_available():
+                st.error("❌ MPS device selected but not available!")
+                st.info("💡 Options:\n- MPS requires Apple Silicon Mac (M1/M2)\n- Change device to 'cpu' in Step 1 and re-save configuration")
+                return
+        except ImportError:
+            if selected_device != "cpu":
+                st.warning(f"⚠️ Cannot verify {selected_device.upper()} availability (PyTorch not imported). Training will attempt to use {selected_device}.")
+        
         try:
             # Create config file for training
             training_config = create_training_config(config)
@@ -938,7 +1147,7 @@ def model_training():
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            status_text.text("🚀 Initializing training...")
+            status_text.text(f"🚀 Initializing training on {selected_device.upper()}...")
             progress_bar.progress(10)
 
             status_text.text("🧠 Training model... (This may take a while)")
@@ -1088,14 +1297,33 @@ def inference_results():
     st.header("📊 Step 5: Inference & Results")
 
     if not st.session_state.config:
-        st.error("❌ Please complete previous steps first!")
-        return
-
-    if not st.session_state.training_done:
-        st.warning("⚠️ Please complete model training first!")
+        st.error("❌ Configuration not found!")
+        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
         return
 
     config = st.session_state.config
+    
+    # Check for model checkpoints (more lenient - check files, not just session state)
+    checkpoint_dir = f"checkpoints/{config['project_name']}"
+    if not os.path.exists(checkpoint_dir):
+        st.error(f"❌ Checkpoint directory not found: `{checkpoint_dir}`")
+        st.info("💡 Please complete Step 5 (Model Training) to generate model checkpoints.")
+        
+        if not st.session_state.training_done:
+            st.warning("⚠️ Training step not marked as complete in this session.")
+        return
+    
+    checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.ckpt')]
+    if not checkpoint_files:
+        st.error(f"❌ No checkpoint files found in `{checkpoint_dir}`")
+        st.info("💡 Please complete Step 5 (Model Training) to generate model checkpoints.")
+        return
+    
+    # Display available checkpoints
+    st.success(f"✅ Found {len(checkpoint_files)} model checkpoint(s)")
+    with st.expander("View Available Checkpoints"):
+        for ckpt in sorted(checkpoint_files):
+            st.write(f"- `{ckpt}`")
 
     st.subheader("🔮 Generate Results")
     
@@ -1187,7 +1415,7 @@ def create_training_config(config):
     return {
         "seed": 42,
         "test_only": False,
-        "accelerator": "cuda",
+        "accelerator": config.get("device", "cpu"),  # Use selected device
         "task": "binary",
         "data": {
             "data_dir": config["boxed_png_path"],  # Use boxed images for training
