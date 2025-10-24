@@ -36,10 +36,10 @@ def logical_sort(file_list):
 # def infer_array_dimensions(image_list):
 #     """
 #     Automatically infer array dimensions from image filenames.
-    
+
 #     Args:
 #         image_list (list): List of image file paths
-        
+
 #     Returns:
 #         tuple: (array_length, dim1, dim2) where:
 #             - array_length: width of the 2D grid
@@ -47,20 +47,20 @@ def logical_sort(file_list):
 #             - dim2: maximum y coordinate + 1
 #     """
 #     _, coordinates = logical_sort(image_list)
-    
+
 #     if not coordinates:
 #         raise ValueError("No coordinates found in filenames")
-    
+
 #     # Extract x and y coordinates
 #     xs, ys = zip(*coordinates)
 #     dim1 = max(xs) + 1  # +1 because coordinates are 0-based
 #     dim2 = max(ys) + 1
-    
+
 #     # Array length is typically the width of the grid
 #     array_length = dim1
-    
+
 #     print(f"Auto-detected dimensions: {dim1} x {dim2} (array_length: {array_length})")
-    
+
 #     return array_length, dim1, dim2
 
 
@@ -95,8 +95,7 @@ def average_vals_image(
 
     for i in tqdm(range(box_size)):
         image_list_x = image_list[
-            starting_x
-            + ((starting_y + i) * array_width) : starting_x
+            starting_x + ((starting_y + i) * array_width) : starting_x
             + ((starting_y + i) * array_width)
             + box_size
         ]
@@ -219,7 +218,9 @@ def max_vals_image(
         plt.show()
 
 
-def convert_all_to_boxes(stem_image_dir, output_dir, box_size, n_cols, n_rows, **kwargs):
+def convert_all_to_boxes(
+    stem_image_dir, output_dir, box_size, n_cols, n_rows, **kwargs
+):
     """
     Convert all images to boxes of size box_size x box_size and save them to the output_dir.
     Automatically detects array dimensions if not provided.
@@ -265,7 +266,7 @@ def convert_all_to_boxes(stem_image_dir, output_dir, box_size, n_cols, n_rows, *
             box_size,
             sorted_image_list,
             n_cols,
-            n_rows, 
+            n_rows,
             col,
             row,
             to_save=True,
@@ -273,4 +274,3 @@ def convert_all_to_boxes(stem_image_dir, output_dir, box_size, n_cols, n_rows, *
             smoothing=kwargs.get("smoothing", "gamma"),
             gamma=kwargs.get("gamma", 1.2),
         )
-

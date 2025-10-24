@@ -6,7 +6,6 @@ from typing import Dict
 
 import pytorch_lightning as pl
 import torch
-import wandb
 from fire import Fire
 from lightning import seed_everything
 from lightning.pytorch.loggers import WandbLogger

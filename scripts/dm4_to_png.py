@@ -38,10 +38,7 @@ def save_dm4_BF_to_png(
     # Check if the file exists
     assert os.path.isfile(dm4_file), "File does not exist"
 
-
-    output_dir = os.path.join(
-        output_file_path
-    )
+    output_dir = os.path.join(output_file_path)
 
     os.makedirs(output_dir, exist_ok=True)
     base_file_name = os.path.splitext(os.path.basename(dm4_file))[0]
