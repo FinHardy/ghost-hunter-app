@@ -11,8 +11,8 @@ echo ">>> Activating '${ENV_NAME}'..."
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "${ENV_NAME}"
 
-echo ">>> Installing packages from requirements.txt using pip..."
-pip install -r requirements.txt
+echo ">>> Installing packages from requirements_web.txt using pip..."
+pip install -r requirements_web.txt
 
 echo ">>> Setup complete! To activate your environment, run:"
 echo "    conda activate ${ENV_NAME}"
