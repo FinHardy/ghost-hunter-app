@@ -8,7 +8,7 @@ This project provides an interactive Streamlit-based web application for the Gho
 - Install dependencies:
 
 ```sh
-pip install -r requirements_web.txt
+pip install -r requirements.txt
 ```
 
 ## Running the Web App
@@ -32,7 +32,7 @@ This will launch the Ghost Hunter ML Pipeline interface in your browser.
 
 ## Troubleshooting
 
-- If you encounter import errors, ensure you have installed all dependencies from `requirements_web.txt`.
+- If you encounter import errors, ensure you have installed all dependencies from `requirements.txt`.
 - For GPU acceleration, ensure CUDA is available and compatible with your PyTorch installation.
 
 ## License
