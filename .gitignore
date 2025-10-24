@@ -16,6 +16,8 @@ output/
 configs/
 checkpoints/
 labelling/
+lightning_logs/
+.ruff_cache/
 
 *.pyc
 *.pyo
