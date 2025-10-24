@@ -7,7 +7,7 @@ from src.models.basemodel import BaseModel
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(ResidualBlock, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(out_channels)
         self.relu = nn.ReLU(inplace=True)
@@ -34,7 +34,7 @@ class ResidualBlock(nn.Module):
 
 class ResidualCNN(BaseModel):
     def __init__(self, _config: Config):
-        super(ResidualCNN, self).__init__(_config)
+        super().__init__(_config)
 
         self.task = _config.task  # assuming _config has an attribute `task`
 
@@ -90,7 +90,7 @@ class ResidualCNN(BaseModel):
 
         num_filters = feature_maps.shape[0]
         print(f"Num filters: {num_filters}")
-        fig, axes = plt.subplots(
+        _, axes = plt.subplots(
             1, min(num_filters, 8), figsize=(20, 10)
         )  # Display up to 8 filters
         for i, ax in enumerate(axes):

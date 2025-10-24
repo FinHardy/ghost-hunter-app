@@ -12,7 +12,6 @@ Returns:
 """
 
 from abc import abstractmethod
-from typing import Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -64,7 +63,7 @@ class BaseModel(pl.LightningModule):
     def loss_fn(self, *args, **kwargs):
         raise NotImplementedError
 
-    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx):
+    def training_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_fn(y_hat, y)
@@ -169,8 +168,6 @@ class BaseModel(pl.LightningModule):
 
     def get_num_params(self) -> None:
         # print number of parameters in comma number format
-        params = "{:,}".format(
-            sum(p.numel() for p in self.parameters() if p.requires_grad)
-        )
+        params = f"{sum(p.numel() for p in self.parameters() if p.requires_grad):,}"
 
         print(f"Number of trainable parameters: {params}")

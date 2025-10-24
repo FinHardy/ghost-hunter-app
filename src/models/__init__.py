@@ -1,4 +1,4 @@
-from .ResidualCNN import ResidualCNN
-from .ThreeLayer_CNN import ThreeLayerCnn
+from .residual_cnn import ResidualCNN
+from .three_layer_cnn import ThreeLayerCnn
 
-__all__ = ["ThreeLayerCnn", "ResidualCNN"]
+__all__ = ["ResidualCNN", "ThreeLayerCnn"]

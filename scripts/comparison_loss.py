@@ -1,24 +1,27 @@
-import os 
+import os
+
 import numpy as np
 from PIL import Image
+
 
 def load_image(image_path):
     """
     Load an image from the specified path and convert it to a numpy array.
-    
+
     Args:
         image_path (str): The path to the image file.
-        
+
     Returns:
         np.ndarray: The image as a numpy array.
     """
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found at {image_path}")
-    
+
     with Image.open(image_path) as img:
         img_array = np.array(img)
-    
+
     return img_array
+
 
 def convert_rgb_to_custom_grayscale_green_red_blue(image_array):
     """
@@ -26,20 +29,20 @@ def convert_rgb_to_custom_grayscale_green_red_blue(image_array):
     - Green maps to 0.0
     - Red maps to 0.5
     - Blue maps to 1.0
-    
+
     Args:
         image_array (np.ndarray): RGB image (H, W, 3) in uint8 format.
-        
+
     Returns:
         np.ndarray: Grayscale image (H, W) in uint8 format.
     """
     if len(image_array.shape) != 3 or image_array.shape[2] != 3:
         raise ValueError("Input must be an RGB image with shape (H, W, 3)")
-    
+
     # Define anchor points
     green = np.array([0, 255, 0], dtype=np.float32)
-    red   = np.array([255, 0, 0], dtype=np.float32)
-    blue  = np.array([0, 0, 255], dtype=np.float32)
+    red = np.array([255, 0, 0], dtype=np.float32)
+    blue = np.array([0, 0, 255], dtype=np.float32)
 
     img = image_array.astype(np.float32)
     h, w, _ = img.shape
@@ -47,7 +50,7 @@ def convert_rgb_to_custom_grayscale_green_red_blue(image_array):
 
     # Vectors for each segment
     gr_vec = red - green  # green → red
-    rb_vec = blue - red   # red → blue
+    rb_vec = blue - red  # red → blue
 
     # Empty array for grayscale
     grayscale = np.zeros(flat_img.shape[0], dtype=np.float32)
@@ -76,22 +79,23 @@ def convert_rgb_to_custom_grayscale_green_red_blue(image_array):
     grayscale = (grayscale * 255).astype(np.uint8).reshape(h, w)
     return grayscale
 
+
 def compare_predicted_and_target_images(predicted_image_path, target_image_path):
     """
     Compare a predicted image with a target image by converting both to grayscale.
-    
+
     Args:
         predicted_image_path (str): The path to the predicted image file.
         target_image_path (str): The path to the target image file.
-        
+
     Returns:
         float: The Mean Squared Error (MSE) loss between the predicted and target images.
     """
     predicted_image = load_image(predicted_image_path)
     target_image = load_image(target_image_path)
-    
+
     predicted_gray = convert_rgb_to_custom_grayscale_green_red_blue(predicted_image)
-    
+
     # for each pixel in the predicted image, do an MSE comparison with the target image (which is greyscale already)
     mse_loss = np.zeros(predicted_gray.shape)
 
@@ -100,7 +104,6 @@ def compare_predicted_and_target_images(predicted_image_path, target_image_path)
             mse_loss[i, j] = (predicted_gray[i, j] - target_image[i, j]) ** 2
 
     mse_loss = np.mean(mse_loss)
-    
+
     print(f"MSE Loss between predicted and target images: {mse_loss}")
     return mse_loss
-

@@ -155,7 +155,11 @@ def output_polarisation_image(
 
 
 def plot_embeddings(
-    config_file: str, dim1: int, dim2: int, save_path: str = "./images/", with_softmax: bool = True
+    config_file: str,
+    dim1: int,
+    dim2: int,
+    save_path: str = "./images/",
+    with_softmax: bool = True,
 ):
     """
     Description: Extracts the embeddings from the network and plots them to a figure
@@ -207,10 +211,11 @@ def plot_embeddings(
         save_path,
         dim1=dim1,
         dim2=dim2,
-        with_softmax = with_softmax
+        with_softmax=with_softmax,
     )
 
     return plot_path
+
 
 if __name__ == "__main__":
     Fire(plot_embeddings)

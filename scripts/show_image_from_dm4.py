@@ -39,7 +39,7 @@ def show_random_diffraction_pattern(
         shape = dataset.data.shape  # type: ignore
         print(f"Dataset shape (scan positions): {shape[0]} x {shape[1]}")
         print(
-            f"Diffraction pattern shape: {dataset.data.shape[2]} x {dataset.data.shape[3]}"
+            f"Diffraction pattern shape: {dataset.data.shape[2]} x {dataset.data.shape[3]}"  # type: ignore
         )  # type: ignore
 
         # Select random scan position

@@ -7,7 +7,7 @@ from src.models.basemodel import BaseModel
 
 class ThreeLayerCnn(BaseModel):
     def __init__(self, _config: Config):
-        super(ThreeLayerCnn, self).__init__(_config)
+        super().__init__(_config)
 
         self.conv1 = nn.Conv2d(1, 16, 3, 1, padding=1)
         self.conv2 = nn.Conv2d(16, 32, 3, 1, padding=1)
@@ -55,7 +55,7 @@ class ThreeLayerCnn(BaseModel):
 
         num_filters = feature_maps.shape[0]
         print(f"Num filters: {num_filters}")
-        fig, axes = plt.subplots(
+        _, axes = plt.subplots(
             1, min(num_filters, 8), figsize=(20, 10)
         )  # Display up to 8 filters
         for i, ax in enumerate(axes):

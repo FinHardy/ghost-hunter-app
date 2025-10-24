@@ -3,17 +3,13 @@ Integration tests for inference pipeline
 """
 
 import os
-import tempfile
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 import torch
-import yaml
 from PIL import Image
 
-from src.datasets import RawPngLoader
-from src.models import ResidualCNN, ThreeLayerCnn
+from src.models import ThreeLayerCnn
 
 
 class TestInferenceCore:

@@ -3,7 +3,6 @@ Integration tests for training pipeline
 """
 
 import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -131,7 +130,6 @@ class TestTrainingPipeline:
         # Mock trainer to avoid actual training
         mock_trainer_instance = MagicMock()
         mock_trainer.return_value = mock_trainer_instance
-
 
         # This should not raise an exception
         train_main(config_file)

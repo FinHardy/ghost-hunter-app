@@ -4,24 +4,24 @@ Refactored from binary_search_labeller.py to work seamlessly within Streamlit
 """
 
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional, Union
 
 import numpy as np
 import yaml
 
 
-def logical_sort_coordinates(file_list: List[str]) -> List[str]:
+def logical_sort_coordinates(file_list: list[str]) -> list[str]:
     """
     Sorts a list of file paths logically based on the numeric parts of the filenames.
 
     Args:
-        file_list: List of file paths to sort.
+        file_list: list of file paths to sort.
 
     Returns:
         Sorted list of file paths.
     """
 
-    def logical_sort_key(filepath: str) -> Tuple[int, ...]:
+    def logical_sort_key(filepath: str) -> tuple[int, ...]:
         filename = os.path.basename(filepath)
         # Extract numeric parts from filename (e.g., _0_15 -> [0, 15])
         coordinates_plus_boxsize = filename.split("_")
@@ -31,17 +31,17 @@ def logical_sort_coordinates(file_list: List[str]) -> List[str]:
     return sorted(file_list, key=logical_sort_key)
 
 
-def get_files(file_path: str) -> List[str]:
+def get_files(file_path: str) -> list[str]:
     """Get all PNG files from directory."""
     files = []
-    for root, dirs, filenames in os.walk(file_path):
+    for root, _, filenames in os.walk(file_path):
         for filename in filenames:
             if filename.endswith(".png"):
                 files.append(os.path.join(root, filename))
     return files
 
 
-def do_sparse_sampling(step: int, width: int, height: int) -> List[int]:
+def do_sparse_sampling(step: int, width: int, height: int) -> list[int]:
     """Generate sparse sampling indices in a grid pattern."""
     sparse_indices = []
     for i in range(0, height, step):
@@ -60,7 +60,7 @@ def save_label(file_name: str, output_file: str, label: str) -> int:
     """
     # Read existing data
     if os.path.exists(output_file):
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             data = yaml.safe_load(f)
             if data is None:
                 data = {"labels": []}
@@ -79,10 +79,10 @@ def save_label(file_name: str, output_file: str, label: str) -> int:
     return len(data["labels"])
 
 
-def load_existing_labels(output_file: str) -> Dict[str, Any]:
+def load_existing_labels(output_file: str) -> dict[str, Any]:
     """Load existing labels from YAML file."""
     if os.path.exists(output_file):
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             data = yaml.safe_load(f) or {"labels": []}
     else:
         data = {"labels": []}
@@ -93,10 +93,10 @@ def load_existing_labels(output_file: str) -> Dict[str, Any]:
     return data
 
 
-def get_label_statistics(output_file: str) -> Dict[str, int]:
+def get_label_statistics(output_file: str) -> dict[str, int]:
     """Get statistics on label distribution."""
     data = load_existing_labels(output_file)
-    label_counts = {}
+    label_counts: dict[str, int] = {}
     for item in data.get("labels", []):
         label = item.get("label", "unknown")
         label_counts[label] = label_counts.get(label, 0) + 1
@@ -169,11 +169,11 @@ class StreamlitLabellerState:
         self.step_through_sparse_indices = 0
         self.labels_assigned = 0
         self.binary_search_iteration = 0
-        self.cache = {}  # Cache for binary search
-        self.non_zero_coords = []
+        self.cache: dict[tuple[int, int], bool] = {}  # Cache for binary search
+        self.non_zero_coords: list[tuple[int, int]] = []
         self.num_non_zero_coords = 0
         self.current_index = 1
-        self.current_file = None
+        self.current_file: Union[str, None] = None
 
     def get_next_file(self) -> Optional[str]:
         """
@@ -211,7 +211,7 @@ class StreamlitLabellerState:
         self.current_file = selected_file
         return selected_file
 
-    def _binary_search_for_boundary(self) -> Optional[Tuple[int, int]]:
+    def _binary_search_for_boundary(self) -> Optional[tuple[int, int]]:
         """
         Search for the boundary between differently labeled regions.
         Returns the coordinate of the next point to label.
@@ -219,12 +219,15 @@ class StreamlitLabellerState:
         # Refresh non-zero coordinates if needed
         if self.current_index >= self.num_non_zero_coords:
             self.binary_search_iteration += 1
-            self.non_zero_coords = np.argwhere(self.sparse_array != 0)
+            non_zero_array = np.argwhere(self.sparse_array != 0)
 
-            if len(self.non_zero_coords) == 0:
+            if len(non_zero_array) == 0:
                 return None
 
-            self.non_zero_coords = [tuple(coord) for coord in self.non_zero_coords]
+            # Convert numpy array to list of tuples with proper typing
+            self.non_zero_coords = [
+                (int(coord[0]), int(coord[1])) for coord in non_zero_array
+            ]
             self.num_non_zero_coords = len(self.non_zero_coords)
             self.current_index = 0
 
@@ -253,7 +256,7 @@ class StreamlitLabellerState:
 
                     if mid_coord not in self.cache:
                         ret_closest_coord = coord
-                        min_distance = dist
+                        min_distance = dist  # type: ignore
 
         self.current_index += 1
 
@@ -293,7 +296,7 @@ class StreamlitLabellerState:
         out_image = self.sparse_array.copy()
         return out_image
 
-    def get_current_position(self) -> Optional[Tuple[int, int]]:
+    def get_current_position(self) -> Optional[tuple[int, int]]:
         """Get the (i, j) position of the current file in the array."""
         if self.current_file is None:
             return None
@@ -307,6 +310,6 @@ class StreamlitLabellerState:
         """Check if all labels have been assigned."""
         return self.labels_assigned >= self.labels_to_assign
 
-    def get_progress(self) -> Tuple[int, int]:
+    def get_progress(self) -> tuple[int, int]:
         """Get (current, total) labels assigned."""
         return (self.labels_assigned, self.labels_to_assign)

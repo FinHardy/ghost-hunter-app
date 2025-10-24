@@ -2,7 +2,6 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import pytorch_lightning as pl
 import torch
@@ -26,12 +25,12 @@ ABS_PATH: str = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 
-models: Dict = {
+models: dict = {
     "ThreeLayerCnn": ThreeLayerCnn,
     "ResidualCNN": ResidualCNN,
 }
 
-datamodules: Dict = {"RawPngLoader": RawPngLoader}
+datamodules: dict = {"RawPngLoader": RawPngLoader}
 
 
 def main(config_file: str):

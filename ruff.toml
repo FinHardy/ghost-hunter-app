@@ -1,0 +1,71 @@
+# Ruff configuration
+# Ruff is an extremely fast Python linter and formatter, written in Rust.
+# It replaces black, isort, flake8, and many other tools.
+
+# Exclude common directories
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "build",
+    "dist",
+    "venv",
+    ".venv",
+    "lightning_logs",
+    "checkpoints",
+]
+
+# Line length (same as black default)
+line-length = 88
+
+# Target Python 3.9+ for compatibility
+target-version = "py39"
+
+[lint]
+# Enable these rule sets
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "B008",   # Do not perform function call in argument defaults
+    "B905",   # zip() without an explicit strict= parameter
+    "N812",   # Lowercase imported as non-lowercase
+    "SIM108", # Use ternary operator instead of if-else (sometimes less readable)
+    "W293",
+    "RUF001",
+    "RUF010",  # Allow str() instead of !s in f-strings for readability
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Respect magic trailing commas
+skip-magic-trailing-comma = false
+
+# Auto-detect line endings
+line-ending = "auto"

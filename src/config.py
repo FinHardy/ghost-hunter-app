@@ -9,9 +9,11 @@ Returns:
 
 import os
 from dataclasses import dataclass
-from typing import Tuple, Union
+from typing import Union
 
 import yaml
+
+ABS_PATH = os.path.abspath(os.path.dirname(__file__))
 
 
 @dataclass
@@ -50,7 +52,7 @@ class OptimizerConfig:
     lr: float
     weight_decay: float
     momentum: float
-    betas: Tuple[float, float]
+    betas: tuple[float, float]
 
 
 @dataclass
@@ -105,18 +107,16 @@ class Config:
     trainer: TrainingConfig
     test: TestConfig
 
-    abs_path: str = os.path.abspath(
-        os.path.dirname(__file__)
-    )  # keep this here for ease of use
+    abs_path: str = ABS_PATH
 
     @classmethod
     def from_yaml(cls, yaml_file: str) -> "Config":
         """Loads configuration from a YAML file."""
         try:
-            with open(yaml_file, "r", encoding="utf-8") as file:
+            with open(yaml_file, encoding="utf-8") as file:
                 config_dict = yaml.safe_load(file)
-        except FileNotFoundError:
-            raise FileNotFoundError(f"File '{yaml_file}' not found.")
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"File '{yaml_file}' not found.") from e
 
         config_dict["data"] = DataConfig(**config_dict["data"])
         config_dict["wandb"] = WandbConfig(**config_dict["wandb"])

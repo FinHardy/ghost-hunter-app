@@ -7,7 +7,6 @@ Returns:
 """
 
 import os
-from typing import List
 
 import numpy as np
 import torch
@@ -26,15 +25,15 @@ class RawPngDataset(Dataset):
     A PyTorch Dataset class for loading
 
     Args:
-        files (List[str]): List of file paths
+        files (list[str]): List of file paths
         transform (callable, optional): Optional transform to be applied on a sample.
     """
 
     def __init__(
         self,
-        files: List[str],
+        files: list[str],
         device: str,
-        labels: List[dict[str, str]],
+        labels: list[dict[str, str]],
         train_dir: str,
         task: str,
         transform=None,
@@ -119,7 +118,7 @@ class RawPngLoader(LightningDataModule):
             [transforms.ToTensor(), transforms.Resize((256, 256))]
         )
 
-        self.labels: List[dict[str, str]] = []
+        self.labels: list[dict[str, str]] = []
 
         # Use absolute path if provided, else fall back to labelling subdirectory
         if os.path.isabs(self.labels_file):
@@ -128,7 +127,7 @@ class RawPngLoader(LightningDataModule):
             labels_file = os.path.join(self.abs_path, "labelling", self.labels_file)
 
         if os.path.exists(labels_file) and labels_file.endswith(".yaml"):
-            with open(labels_file, "r") as f:
+            with open(labels_file) as f:
                 data = yaml.safe_load(f)
                 self.labels = data["labels"]
         else:
@@ -139,9 +138,9 @@ class RawPngLoader(LightningDataModule):
         self.files = [entry["file"] for entry in self.labels]
 
         # File placeholders
-        self.train_files: List[str] = []
-        self.val_files: List[str] = []
-        self.test_files: List[str] = []
+        self.train_files: list[str] = []
+        self.val_files: list[str] = []
+        self.test_files: list[str] = []
 
         self.train_dataset: RawPngDataset
         self.test_dataset: RawPngDataset

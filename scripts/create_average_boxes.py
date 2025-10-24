@@ -33,37 +33,6 @@ def logical_sort(file_list):
     return sorted_files, coordinates
 
 
-# def infer_array_dimensions(image_list):
-#     """
-#     Automatically infer array dimensions from image filenames.
-
-#     Args:
-#         image_list (list): List of image file paths
-
-#     Returns:
-#         tuple: (array_length, dim1, dim2) where:
-#             - array_length: width of the 2D grid
-#             - dim1: maximum x coordinate + 1
-#             - dim2: maximum y coordinate + 1
-#     """
-#     _, coordinates = logical_sort(image_list)
-
-#     if not coordinates:
-#         raise ValueError("No coordinates found in filenames")
-
-#     # Extract x and y coordinates
-#     xs, ys = zip(*coordinates)
-#     dim1 = max(xs) + 1  # +1 because coordinates are 0-based
-#     dim2 = max(ys) + 1
-
-#     # Array length is typically the width of the grid
-#     array_length = dim1
-
-#     print(f"Auto-detected dimensions: {dim1} x {dim2} (array_length: {array_length})")
-
-#     return array_length, dim1, dim2
-
-
 def average_vals_image(
     box_size: int,
     image_list: list[str],
@@ -246,14 +215,6 @@ def convert_all_to_boxes(
 
     if not image_list:
         raise ValueError(f"No PNG files found in directory: {stem_image_dir}")
-
-    # # Auto-detect array dimensions if not provided
-    # if array_length is None:
-    #     print("Auto-detecting array dimensions from filenames...")
-    #     array_length, dim1, dim2 = infer_array_dimensions(image_list)
-    #     print(f"Detected grid: {dim1} x {dim2}, using array_length = {array_length}")
-    # else:
-    #     print(f"Using provided array_length = {array_length}")
 
     sorted_image_list, _ = logical_sort(image_list)
 

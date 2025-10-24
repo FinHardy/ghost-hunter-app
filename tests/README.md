@@ -15,7 +15,7 @@ pytest tests/ --cov=src --cov-report=html
 
 ## Test Structure
 - `tests/unit/` - Unit tests for individual components
-- `tests/integration/` - Integration tests for workflows  
+- `tests/integration/` - Integration tests for workflows
 - `tests/conftest.py` - Shared test fixtures
 - `tests/utils.py` - Test data generation utilities
 

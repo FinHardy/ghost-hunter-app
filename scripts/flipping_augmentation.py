@@ -1,9 +1,9 @@
 import os
 
 import numpy as np
-import tqdm as tqdm
 import yaml  # type: ignore
 from PIL import Image
+from tqdm import tqdm
 
 ABS_PATH = os.path.abspath(os.path.dirname(__file__))
 
@@ -41,31 +41,45 @@ def flip_all_images(labels, train_dir, data_dir, labels_file):
 
         img90 = np.rot90(img)  # type: ignore
         img90_file = os.path.join(train_dir, data["file"].replace(".png", "_90rot.png"))
-        if os.path.exists(img90_file):
-            Image.fromarray(img90).save(img90_file)
-        new_labels.append({"file": os.path.basename(img90_file), "label": img90_label})
+        try:
+            if os.path.exists(img90_file):
+                Image.fromarray(img90).save(img90_file)
+            new_labels.append(
+                {"file": os.path.basename(img90_file), "label": img90_label}
+            )
+        except Exception as e:
+            print(f"Error saving file {img90_file}: {e}")
+            continue
 
         # 180-degree rotation
         img180 = np.rot90(img90)
         img180_file = os.path.join(
             train_dir, data["file"].replace(".png", "_180rot.png")
         )
-        if os.path.exists(img180_file):
-            Image.fromarray(img180).save(img180_file)
-        new_labels.append(
-            {"file": os.path.basename(img180_file), "label": img180_label}
-        )
+        try:
+            if os.path.exists(img180_file):
+                Image.fromarray(img180).save(img180_file)
+            new_labels.append(
+                {"file": os.path.basename(img180_file), "label": img180_label}
+            )
+        except Exception as e:
+            print(f"Error saving file {img180_file}: {e}")
+            continue
 
         # 270-degree rotation
         img270 = np.rot90(img180)
         img270_file = os.path.join(
             train_dir, data["file"].replace(".png", "_270rot.png")
         )
-        if os.path.exists(img270_file):
-            Image.fromarray(img270).save(img270_file)
-        new_labels.append(
-            {"file": os.path.basename(img270_file), "label": img270_label}
-        )
+        try:
+            if os.path.exists(img270_file):
+                Image.fromarray(img270).save(img270_file)
+            new_labels.append(
+                {"file": os.path.basename(img270_file), "label": img270_label}
+            )
+        except Exception as e:
+            print(f"Error saving file {img270_file}: {e}")
+            continue
 
         print(f"Rotated images for {data['file']} saved.")
 
@@ -75,7 +89,7 @@ def flip_all_images(labels, train_dir, data_dir, labels_file):
 
 if __name__ == "__main__":
     labels_file = "../labelling/labels.yaml"
-    with open(labels_file, "r") as stream:
+    with open(labels_file) as stream:
         try:
             labels = yaml.safe_load(stream)
         except yaml.YAMLError as exc:

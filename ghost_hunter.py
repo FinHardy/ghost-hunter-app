@@ -19,7 +19,7 @@ sys.path.append(str(Path(__file__).parent))
 
 try:
     from scripts.create_average_boxes import convert_all_to_boxes
-    from scripts.dm4_to_png import save_dm4_BF_to_png
+    from scripts.dm4_to_png import export_dm4_bf_images_to_png
     from scripts.streamlit_labeller import (
         StreamlitLabellerState,
         get_label_statistics,
@@ -172,7 +172,7 @@ def setup_configuration():
         if existing_configs:
             selected_config = st.selectbox(
                 "Select an existing project",
-                options=[""] + sorted(existing_configs),
+                options=["", *sorted(existing_configs)],
                 key="existing_project_select",
                 help="Choose from previously created projects",
             )
@@ -182,7 +182,7 @@ def setup_configuration():
                 # Load the config to show summary
                 try:
                     config_path = os.path.join(configs_dir, f"{selected_config}.yaml")
-                    with open(config_path, "r") as f:
+                    with open(config_path) as f:
                         loaded_config = yaml.safe_load(f)
 
                     with st.expander("📋 Project Info"):
@@ -318,7 +318,7 @@ def setup_configuration():
     if load_from_config and selected_config:
         try:
             config_path = os.path.join("configs", f"{selected_config}.yaml")
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 loaded_config = yaml.safe_load(f)
 
             default_device = loaded_config.get("accelerator", "cpu")
@@ -444,11 +444,14 @@ def setup_configuration():
             shape = dataset.data.shape  # type: ignore
             n_rows = shape[0]
             n_cols = shape[1]
+
+            diffraction_image_size = dataset.data[0][0].shape  # type: ignore
+
             st.write(
                 f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
             )
             st.write(
-                f"**Diffraction pattern size:** {n_cols} x {n_rows} (detector pixels)"
+                f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
             )
 
             # Create a figure with two subplots side by side
@@ -593,7 +596,7 @@ def setup_configuration():
                 try:
                     labels_data = load_existing_labels(labelling_path)
                     num_labels = len(labels_data.get("labels", []))
-                    if num_labels >= int(config["number_of_labels"]):
+                    if num_labels >= int(config["number_of_labels"]):  # type: ignore
                         st.session_state.labelling_done = True
                         st.success(
                             f"✅ Found completed labelling file with {num_labels} labels"
@@ -689,12 +692,11 @@ def dm4_conversion():
             return
 
         # Validate crop parameters if cropping is enabled
-        if crop_images:
-            if x_min >= x_max or y_min >= y_max:
-                st.error(
-                    "❌ Invalid crop parameters! Please fix the values above before proceeding."
-                )
-                return
+        if crop_images and (x_min >= x_max or y_min >= y_max):
+            st.error(
+                "❌ Invalid crop parameters! Please fix the values above before proceeding."
+            )
+            return
 
         try:
             # Use the file path directly - no need to copy
@@ -717,7 +719,7 @@ def dm4_conversion():
             progress_bar.progress(50)
 
             # Call conversion function directly with the file path
-            save_dm4_BF_to_png(
+            export_dm4_bf_images_to_png(
                 dm4_file_path,
                 config["output_png_path"],
                 crop=crop_images,
@@ -770,28 +772,34 @@ def average_boxing():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.info(f"""
+        st.info(
+            f"""
         **Input Settings:**
         - 📁 PNG Directory: `{config["output_png_path"]}`
         - � Box Size: {config["box_size"]}
         - � Array Length: Auto-detected from filenames
-        """)
+        """
+        )
 
     with col2:
-        st.info(f"""
+        st.info(
+            f"""
         **Output Settings:**
         - 📁 Output Directory: `{config["boxed_png_path"]}`
         - 🖼️ Processing: Max values with {config["box_size"]}x{config["box_size"]} boxes
-        """)
+        """
+        )
 
         st.subheader("ℹ️ About Boxing")
-        st.write("""
+        st.write(
+            """
         **Average boxing** creates averaged images from neighboring regions:
         - Takes a box of images (e.g., 3x3 grid)
         - Computes max/average values across the box
         - Reduces noise and enhances features
         - Essential preprocessing step for labelling
-        """)
+        """
+        )
 
     if st.button("🚀 Start Average Boxing", type="primary"):
         # Validate input directory
@@ -990,18 +998,22 @@ def data_labelling():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.info(f"""
+        st.info(
+            f"""
         **Current Settings:**
         - 📁 Data Path: `{config["boxed_png_path"]}`
         - 🎯 Sampling Space: {config["sampling_space"]}
         - 🔢 Number of Labels: {config["number_of_labels"]}
-        """)
+        """
+        )
 
     with col2:
-        st.info(f"""
+        st.info(
+            f"""
         **Output:**
         - 📄 Labels File: `{config["labelling_path"]}`
-        """)
+        """
+        )
 
     # Initialize labeller state if needed
     if (
@@ -1262,23 +1274,27 @@ def model_training():
     col1, col2 = st.columns(2)
 
     with col1:
-        st.info(f"""
+        st.info(
+            f"""
         **Model Settings:**
         - 🧠 Model: ThreeLayerCnn
         - �️ Device: {config.get("device", "cpu").upper()}
         - 📊 Max Epochs: {config["max_epochs"]}
         - 📦 Batch Size: {config["batch_size"]}
         - 📈 Learning Rate: {config["learning_rate"]}
-        """)
+        """
+        )
 
     with col2:
-        st.info("""
+        st.info(
+            """
         **Data Configuration:**
         - 🎯 Train Ratio: 80%
         - ✅ Validation Ratio: 10%
         - 🧪 Test Ratio: 10%
         - 🖼️ Image Size: 256x256
-        """)
+        """
+        )
 
     if st.button("🚀 Start Model Training", type="primary"):
         # Validate device availability before training
@@ -1599,17 +1615,16 @@ def display_results(plot_path):
         st.image(plot_path, width="stretch")
 
         # Add download button centered below the image
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            with open(plot_path, "rb") as file:
-                st.download_button(
-                    label="📥 Download Result",
-                    data=file,
-                    file_name=os.path.basename(plot_path),
-                    mime="image/png",
-                    width="stretch",
-                    type="primary",
-                )
+        _, col2, _ = st.columns([1, 2, 1])
+        with col2, open(plot_path, "rb") as file:
+            st.download_button(
+                label="📥 Download Result",
+                data=file,
+                file_name=os.path.basename(plot_path),
+                mime="image/png",
+                width="stretch",
+                type="primary",
+            )
     else:
         st.info("ℹ️ No result image found. Run inference to generate results.")
 

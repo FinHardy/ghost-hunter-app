@@ -7,7 +7,7 @@ import py4DSTEM.preprocess.preprocess as pre
 from tqdm import tqdm
 
 
-def save_dm4_BF_to_png(
+def export_dm4_bf_images_to_png(
     dm4_file,
     output_file_path,
     crop_values: Optional[tuple[int, int, int, int]],  # x_min, x_max, y_min, y_max
@@ -47,13 +47,13 @@ def save_dm4_BF_to_png(
         image = py4DSTEM.import_file(dm4_file)
         if binning_param > 1:
             pre.bin_data_diffraction(image, binning_param)
-        shape = image.data.shape
+        shape = image.data.shape  # type: ignore
         # TODO: put *args in the function signature
         if crop:
-            image = image.crop_Q(crop_values)
+            image = image.crop_Q(crop_values)  # type: ignore
         for row in tqdm(range(shape[0])):
             for col in range(shape[1]):
-                diffraction_pattern = image[row, col].data
+                diffraction_pattern = image[row, col].data  # type: ignore
                 # TODO: i think this is a bug and the i and j are the wrong way around which is what
                 # causes the images to be flipped weirdly at inference time
                 filename = os.path.join(output_dir, f"{base_file_name}_{row}_{col}.png")

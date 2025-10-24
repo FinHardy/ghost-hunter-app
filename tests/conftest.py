@@ -6,10 +6,8 @@ import os
 import sys
 import tempfile
 
-import numpy as np
 import pytest
 import torch
-from PIL import Image
 
 # Add src to path for imports
 TEST_DIR = os.path.dirname(os.path.abspath(__file__))

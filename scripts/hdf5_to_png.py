@@ -3,7 +3,6 @@ from typing import Optional
 
 import h5py
 import matplotlib.pyplot as plt
-import numpy as np
 from tqdm import tqdm
 
 
@@ -54,30 +53,30 @@ def save_h5_diffraction_to_png(
     base_file_name = os.path.splitext(os.path.basename(h5_file))[0]
 
     try:
-        with h5py.File(h5_file, "r") as f:
+        with h5py.File(h5_file) as f:
             data = f[dataset_key]  # shape: (scan_y, scan_x, height, width)
-            scan_y, scan_x = data.shape[0], data.shape[1]
+            scan_y, scan_x = data.shape[0], data.shape[1]  # type: ignore
 
             for i in tqdm(range(scan_y), desc="Saving PNGs"):
                 for j in range(scan_x):
-                    pattern = data[i, j]
+                    pattern = data[i, j]  # type: ignore
 
                     # Optional cropping
                     if crop and crop_values is not None:
                         x_min, x_max, y_min, y_max = crop_values
-                        pattern = pattern[y_min:y_max, x_min:x_max]
+                        pattern = pattern[y_min:y_max, x_min:x_max]  # type: ignore
 
                     # Optional binning
                     if binning_param > 1:
-                        pattern = pattern.reshape(
-                            pattern.shape[0] // binning_param,
+                        pattern = pattern.reshape(  # type: ignore
+                            pattern.shape[0] // binning_param,  # type: ignore
                             binning_param,
-                            pattern.shape[1] // binning_param,
+                            pattern.shape[1] // binning_param,  # type: ignore
                             binning_param,
                         ).mean(axis=(1, 3))
 
                     filename = os.path.join(output_dir, f"{j}_{i}_{base_file_name}.png")
-                    plt.imsave(filename, pattern, cmap="gray", format="png")
+                    plt.imsave(filename, pattern, cmap="gray", format="png")  # type: ignore
 
     except Exception as e:
         print(f"Error processing file {h5_file}: {e}")

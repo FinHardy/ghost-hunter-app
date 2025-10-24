@@ -5,7 +5,6 @@ Place for redundant functions that are used across multiple files
 import math
 import os
 import random
-from typing import Tuple
 
 import matplotlib.pyplot as plt
 import py4DSTEM
@@ -37,7 +36,7 @@ def load_random_png_as_tensor(data_dir: str, image_size: int) -> torch.Tensor:
 
     Args:
     - data_dir (str): Directory containing PNG files.
-    - image_size (Tuple[int, int]): Desired image size (height, width).
+    - image_size (tuple[int, int]): Desired image size (height, width).
 
     Returns:
     - torch.Tensor: Transformed image tensor.
@@ -65,7 +64,7 @@ def load_random_png_as_tensor(data_dir: str, image_size: int) -> torch.Tensor:
 
 def generate_image_with_missing_pixels(
     image: torch.Tensor, noise_ratio: float = 0.25
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Description: Generates an image with missing pixels.
 
@@ -80,7 +79,7 @@ def generate_image_with_missing_pixels(
     ground_truth = image.clone()
     modified_image = image.clone()
     num_pixels = modified_image.shape[1] * modified_image.shape[2]
-    num_missing_pixels = int(math.ceil(num_pixels * noise_ratio))
+    num_missing_pixels = math.ceil(num_pixels * noise_ratio)
 
     image_flat = modified_image.view(-1)
     missing_indices = torch.randperm(num_pixels)[:num_missing_pixels]
@@ -90,7 +89,7 @@ def generate_image_with_missing_pixels(
     return missing_pixels, ground_truth
 
 
-def save_dm4_BF_to_png(*files, binning_param: int = 2):
+def export_dm4_bf_images_to_png(*files, binning_param: int = 2):
     """
     Description:
     - Save the Bright Field images from the dm4 files to png format
@@ -100,7 +99,7 @@ def save_dm4_BF_to_png(*files, binning_param: int = 2):
     IMPORTANT: Files do not need absolute path but do need to be stored inside
     /data/dm4 directory
 
-    e.g. save_dm4_BF_to_png(["file1.dm4", "file2.dm4"])
+    e.g. export_dm4_bf_images_to_png(["file1.dm4", "file2.dm4"])
 
     """
     base_file = os.getcwd()
@@ -116,13 +115,13 @@ def save_dm4_BF_to_png(*files, binning_param: int = 2):
 
         try:
             image = py4DSTEM.import_file(os.path.join(dm4_files, file))
-            pre_shape = image.data.shape
+            pre_shape = image.data.shape  # type: ignore
             pre.bin_data_diffraction(image, binning_param)
-            shape = image.data.shape
+            shape = image.data.shape  # type: ignore
             assert pre_shape != shape, "Data shape should change after binning"
             for i in tqdm(range(shape[0])):
                 for j in range(shape[1]):
-                    diffraction_pattern = image[i, j].data
+                    diffraction_pattern = image[i, j].data  # type: ignore
                     filename = os.path.join(output_dir, f"{file}_{i}_{j}.png")
                     plt.imsave(filename, diffraction_pattern, cmap="gray")
 
@@ -133,4 +132,4 @@ def save_dm4_BF_to_png(*files, binning_param: int = 2):
 
 if __name__ == "__main__":
     # using this file to run the save file function since its just a utility function
-    Fire(save_dm4_BF_to_png)
+    Fire(export_dm4_bf_images_to_png)

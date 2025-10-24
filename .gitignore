@@ -6,7 +6,7 @@ __pycache__/
 # C extensions
 *.so
 
-# misc 
+# misc
 .DS_Store
 .vscode/
 wandb_key.txt

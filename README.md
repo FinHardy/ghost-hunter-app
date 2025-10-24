@@ -16,7 +16,7 @@ pip install -r requirements_web.txt
 To start the web app, run:
 
 ```sh
-streamlit run ghost_hunter.py 
+streamlit run ghost_hunter.py
 ```
 
 This will launch the Ghost Hunter ML Pipeline interface in your browser.
