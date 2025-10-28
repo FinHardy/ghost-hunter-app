@@ -241,7 +241,7 @@ def setup_configuration():
                 "Use this existing project", key="use_existing", value=False
             )
         else:
-            st.info("ℹ️ No existing projects found")
+            st.info("No existing projects found")
             st.caption("Create a new project to get started")
             selected_config = None
             use_existing_project = False
@@ -269,7 +269,7 @@ def setup_configuration():
 
     if project_exists:
         st.info(
-            f"ℹ️ **Existing project detected!** If PNG files and/or boxed images already exist for '{project_name}', you can skip those steps and proceed directly to labelling or training."
+            f"ℹ*Existing project detected!** If PNG files and/or boxed images already exist for '{project_name}', you can skip those steps and proceed directly to labelling or training."
         )
 
         # Show what exists
@@ -307,7 +307,7 @@ def setup_configuration():
         help=help_text,
     )
 
-    st.subheader("🤖 Training Parameters")
+    st.subheader("Training Parameters")
 
     # Load defaults from existing config if available
     default_device = "cpu"
@@ -418,18 +418,18 @@ def setup_configuration():
                     "❌ Invalid file type! Please provide a file with `.dm4` extension."
                 )
                 st.info(
-                    "💡 Tip: Make sure your file path ends with `.dm4` (e.g., `/path/to/data.dm4`)"
+                    "Tip: Make sure your file path ends with `.dm4` (e.g., `/path/to/data.dm4`)"
                 )
         else:
             st.error(f"❌ File not found at the specified path: `{dm4_file_path}`")
             st.info(
-                "💡 Tips:\n- Check for typos in the file path\n- Use absolute paths (e.g., `/home/user/data.dm4`)\n- Ensure you have read permissions for the file"
+                "Tips:\n- Check for typos in the file path\n- Use absolute paths (e.g., `/home/user/data.dm4`)\n- Ensure you have read permissions for the file"
             )
     elif not project_exists:
         st.warning(
             "⚠️ DM4 file path is required for new projects. Please provide a valid path above."
         )
-        st.info("💡 If you're loading an existing project, the DM4 file is optional.")
+        st.info("If you're loading an existing project, the DM4 file is optional.")
 
     # Show DM4 info and images if valid path provided
     if dm4_file_valid:
@@ -484,7 +484,7 @@ def setup_configuration():
             st.warning(f"Could not read DM4 file or display images: {e}")
 
     # Save configuration
-    if st.button("💾 Save Configuration & Proceed", type="primary"):
+    if st.button("Save Configuration & Proceed", type="primary"):
         # Validate project name before proceeding
         import re
 
@@ -543,7 +543,7 @@ def setup_configuration():
         elif not dm4_file_path or not dm4_file_valid:
             st.error("❌ Cannot proceed without valid DM4 file for new projects!")
             st.info(
-                "💡 For new projects: Provide a valid DM4 file path above.\n💡 For existing projects: Make sure PNG or boxed files exist in the project directories."
+                "For new projects: Provide a valid DM4 file path above.\n💡 For existing projects: Make sure PNG or boxed files exist in the project directories."
             )
             return
         else:
@@ -619,18 +619,18 @@ def setup_configuration():
         # Provide navigation guidance based on what exists
         if st.session_state.training_done:
             st.info(
-                "👉 Existing model checkpoints found! You can proceed directly to Step 6: Inference"
+                "Existing model checkpoints found! You can proceed directly to Step 6: Inference"
             )
         elif st.session_state.labelling_done:
-            st.info("👉 Labelling completed! You can proceed to Step 5: Model Training")
+            st.info("Labelling completed! You can proceed to Step 5: Model Training")
         elif st.session_state.conversion_done and st.session_state.boxing_done:
             st.info(
-                "👉 Existing project loaded! You can proceed to Step 4: Data Labelling"
+                "Existing project loaded! You can proceed to Step 4: Data Labelling"
             )
         elif st.session_state.conversion_done:
-            st.info("👉 PNG files found! You can proceed to Step 3: Average Boxing")
+            st.info("PNG files found! You can proceed to Step 3: Average Boxing")
         else:
-            st.info("👉 You can now proceed to Step 2: DM4 Conversion")
+            st.info("You can now proceed to Step 2: DM4 Conversion")
 
 
 def dm4_conversion():
@@ -687,7 +687,7 @@ def dm4_conversion():
         if not config.get("dm4_file_path"):
             st.error("❌ No DM4 file path found in configuration!")
             st.info(
-                "💡 Please go back to Step 1 and provide a valid DM4 file path, then save the configuration."
+                "Please go back to Step 1 and provide a valid DM4 file path, then save the configuration."
             )
             return
 
@@ -705,7 +705,7 @@ def dm4_conversion():
             if not os.path.exists(dm4_file_path):
                 st.error(f"❌ DM4 file not found at: `{dm4_file_path}`")
                 st.info(
-                    "💡 The file may have been moved or deleted. Please update the path in Step 1."
+                    "The file may have been moved or deleted. Please update the path in Step 1."
                 )
                 return
 
@@ -730,7 +730,7 @@ def dm4_conversion():
             status_text.text("✅ Conversion completed successfully!")
 
             st.session_state.conversion_done = True
-            st.success("🎉 DM4 conversion completed! Ready for average boxing.")
+            st.success("DM4 conversion completed! Ready for average boxing.")
 
         except Exception as e:
             st.error(f"❌ Error during conversion: {str(e)}")
@@ -738,7 +738,7 @@ def dm4_conversion():
 
 def average_boxing():
     """Step 3: Average Boxing"""
-    st.header("📦 Step 3: Average Boxing")
+    st.header("Step 3: Average Boxing")
 
     if not st.session_state.config:
         st.error("❌ Please complete previous steps first!")
@@ -754,7 +754,7 @@ def average_boxing():
     with st.expander("Current Configuration", expanded=False):
         st.json(config)
 
-    st.subheader("📦 Boxing Configuration")
+    st.subheader("Boxing Configuration")
 
     # Box size slider
     box_size = st.slider(
@@ -806,7 +806,7 @@ def average_boxing():
         if not os.path.exists(config["output_png_path"]):
             st.error(f"❌ Input directory not found: `{config['output_png_path']}`")
             st.info(
-                "💡 Please complete Step 2 (DM4 Conversion) first to generate PNG files."
+                "Please complete Step 2 (DM4 Conversion) first to generate PNG files."
             )
             return
 
@@ -817,7 +817,7 @@ def average_boxing():
         if len(png_files) == 0:
             st.error(f"❌ No PNG files found in `{config['output_png_path']}`")
             st.info(
-                "💡 Please complete Step 2 (DM4 Conversion) first to generate PNG files."
+                "Please complete Step 2 (DM4 Conversion) first to generate PNG files."
             )
             return
 
@@ -854,20 +854,20 @@ def average_boxing():
                 st.error("❌ No PNG files found in the output directory!")
                 return
 
-            st.info(f"📊 Found {len(png_files)} PNG files to process")
+            st.info(f"Found {len(png_files)} PNG files to process")
 
             # Progress tracking
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            status_text.text("📦 Initializing boxing process...")
+            status_text.text("Initializing boxing process...")
             progress_bar.progress(10)
 
             # Ensure output directory exists
             os.makedirs(config["boxed_png_path"], exist_ok=True)
 
             progress_bar.progress(25)
-            status_text.text("📦 Creating averaged boxes... (This may take a while)")
+            status_text.text("Creating averaged boxes... (This may take a while)")
 
             # Call boxing function
             convert_all_to_boxes(
@@ -882,13 +882,13 @@ def average_boxing():
             status_text.text("✅ Boxing completed successfully!")
 
             st.session_state.boxing_done = True
-            st.success("🎉 Average boxing completed! Ready for data labelling.")
+            st.success("Average boxing completed! Ready for data labelling.")
 
             # Show results summary
             boxed_files = [
                 f for f in os.listdir(config["boxed_png_path"]) if f.endswith(".png")
             ]
-            st.info(f"📊 Generated {len(boxed_files)} boxed images")
+            st.info(f"Generated {len(boxed_files)} boxed images")
 
         except Exception as e:
             st.error(f"❌ Error during boxing: {str(e)}")
@@ -901,17 +901,17 @@ def average_boxing():
 
 def data_labelling():
     """Step 4: Data Labelling - Streamlit Native Interface"""
-    st.header("🏷️ Step 4: Data Labelling")
+    st.header("Step 4: Data Labelling")
 
     if not st.session_state.config:
         st.error("❌ Configuration not found!")
-        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
+        st.info("Please complete Step 1 (Setup & Configuration) first.")
         return
 
     if not st.session_state.boxing_done:
         st.warning("⚠️ Boxing step not completed!")
         st.info(
-            "💡 Please complete Step 3 (Average Boxing) before labelling. You need boxed images to label."
+            "Please complete Step 3 (Average Boxing) before labelling. You need boxed images to label."
         )
         return
 
@@ -920,7 +920,7 @@ def data_labelling():
     # Check if boxed images exist
     if not os.path.exists(config["boxed_png_path"]):
         st.error(f"❌ Boxed images directory not found: `{config['boxed_png_path']}`")
-        st.info("💡 Please complete Step 3 (Average Boxing) to generate boxed images.")
+        st.info("Please complete Step 3 (Average Boxing) to generate boxed images.")
         return
 
     boxed_files = [
@@ -928,7 +928,7 @@ def data_labelling():
     ]
     if len(boxed_files) == 0:
         st.error(f"❌ No boxed images found in `{config['boxed_png_path']}`")
-        st.info("💡 Please complete Step 3 (Average Boxing) to generate boxed images.")
+        st.info("Please complete Step 3 (Average Boxing) to generate boxed images.")
         return
 
     # Check if labelling is already complete
@@ -938,13 +938,13 @@ def data_labelling():
             existing_num_labels = len(labels_data.get("labels", []))
             if existing_num_labels > 0:
                 st.info(
-                    f"ℹ️ Found existing labels file with {existing_num_labels} labels. You can continue labelling or proceed to training if complete."
+                    f"Found existing labels file with {existing_num_labels} labels. You can continue labelling or proceed to training if complete."
                 )
         except Exception:
             pass
 
     # Display configuration
-    st.subheader("📋 Labelling Configuration")
+    st.subheader("Labelling Configuration")
 
     # Labelling parameter sliders
     sampling_interval = st.slider(
@@ -969,7 +969,7 @@ def data_labelling():
         st.error(
             f"❌ Number of labels ({number_of_labels}) exceeds available images ({len(boxed_files)})!"
         )
-        st.info(f"💡 Please reduce the number of labels to {len(boxed_files)} or less.")
+        st.info(f"Please reduce the number of labels to {len(boxed_files)} or less.")
         return
 
     # Calculate expected sparse samples
@@ -981,15 +981,13 @@ def data_labelling():
             f"⚠️ Sampling interval ({sampling_interval}) will generate ~{expected_sparse} samples, which exceeds your target of {number_of_labels} labels."
         )
         st.info(
-            f"💡 Consider increasing the sampling interval to at least {int(np.sqrt(config['n_rows'] * config['n_cols'] / number_of_labels))} for efficiency."
+            f"Consider increasing the sampling interval to at least {int(np.sqrt(config['n_rows'] * config['n_cols'] / number_of_labels))} for efficiency."
         )
     elif expected_sparse < number_of_labels * 0.3:
         st.warning(
             f"⚠️ Sampling interval ({sampling_interval}) will only generate ~{expected_sparse} initial samples. Most labelling will use binary search refinement."
         )
-        st.info(
-            "💡 Consider decreasing the sampling interval for more uniform coverage."
-        )
+        st.info("Consider decreasing the sampling interval for more uniform coverage.")
 
     # Update config with selected parameters
     st.session_state.config["sampling_space"] = sampling_interval
@@ -1039,7 +1037,7 @@ def data_labelling():
 
             # Check if labelling is complete
             if labeller.is_complete():
-                st.success("🎉 All labels have been assigned!")
+                st.success("All labels have been assigned!")
                 st.session_state.labelling_done = True
 
                 # Show final heatmap
@@ -1174,7 +1172,7 @@ def data_labelling():
 
         except FileNotFoundError as e:
             st.error(f"❌ Error: {str(e)}")
-            st.info("💡 Make sure you have completed the average boxing step first.")
+            st.info("Make sure you have completed the average boxing step first.")
         except Exception as e:
             st.error(f"❌ Error during labelling: {str(e)}")
             import traceback
@@ -1183,7 +1181,7 @@ def data_labelling():
 
     # Show existing labels if file exists
     if os.path.exists(config["labelling_path"]):
-        with st.expander("📊 View Existing Labels"):
+        with st.expander("View Existing Labels"):
             try:
                 labels_data = load_existing_labels(config["labelling_path"])
                 if labels_data and "labels" in labels_data:
@@ -1205,7 +1203,7 @@ def model_training():
 
     if not st.session_state.config:
         st.error("❌ Configuration not found!")
-        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
+        st.info("Please complete Step 1 (Setup & Configuration) first.")
         return
 
     config = st.session_state.config
@@ -1213,9 +1211,7 @@ def model_training():
     # Validate labels file exists (more lenient - check file, not just session state)
     if not os.path.exists(config["labelling_path"]):
         st.error(f"❌ Labels file not found: `{config['labelling_path']}`")
-        st.info(
-            "💡 Please complete Step 4 (Data Labelling) to generate the labels file."
-        )
+        st.info("Please complete Step 4 (Data Labelling) to generate the labels file.")
 
         # Still show warning about session state if that's the issue
         if not st.session_state.labelling_done:
@@ -1230,7 +1226,7 @@ def model_training():
         if num_labels < 10:
             st.error(f"❌ Insufficient labels! Found only {num_labels} labels.")
             st.info(
-                "💡 You need at least 10 labels for training. Please complete the labelling step."
+                "You need at least 10 labels for training. Please complete the labelling step."
             )
             return
         elif num_labels < 30:
@@ -1238,7 +1234,7 @@ def model_training():
                 f"⚠️ Low number of labels ({num_labels}). Training may not produce good results."
             )
             st.info(
-                "💡 Consider labelling more images (recommended: 50+) for better model performance."
+                "Consider labelling more images (recommended: 50+) for better model performance."
             )
         else:
             st.success(f"✅ Found {num_labels} labels - good for training!")
@@ -1249,7 +1245,7 @@ def model_training():
             st.error(
                 "❌ Only one label type found! You need at least 2 different label types for classification."
             )
-            st.info("💡 Please add more diverse labels in the labelling step.")
+            st.info("Please add more diverse labels in the labelling step.")
             return
 
         # Check for imbalanced labels
@@ -1260,7 +1256,7 @@ def model_training():
                 "⚠️ Imbalanced label distribution detected! Some labels are 5x more common than others."
             )
             st.info(
-                "💡 Consider labelling more images of underrepresented classes for better model balance."
+                "Consider labelling more images of underrepresented classes for better model balance."
             )
             with st.expander("View Label Distribution"):
                 for label, count in label_stats.items():
@@ -1305,13 +1301,13 @@ def model_training():
             if selected_device == "cuda" and not torch.cuda.is_available():
                 st.error("❌ CUDA device selected but not available!")
                 st.info(
-                    "💡 Options:\n- Install CUDA and PyTorch with CUDA support\n- Change device to 'cpu' in Step 1 and re-save configuration"
+                    "Options:\n- Install CUDA and PyTorch with CUDA support\n- Change device to 'cpu' in Step 1 and re-save configuration"
                 )
                 return
             elif selected_device == "mps" and not torch.backends.mps.is_available():
                 st.error("❌ MPS device selected but not available!")
                 st.info(
-                    "💡 Options:\n- MPS requires Apple Silicon Mac (M1/M2)\n- Change device to 'cpu' in Step 1 and re-save configuration"
+                    "Options:\n- MPS requires Apple Silicon Mac (M1/M2)\n- Change device to 'cpu' in Step 1 and re-save configuration"
                 )
                 return
         except ImportError:
@@ -1379,7 +1375,7 @@ def display_training_stats(config):
     lightning_logs_dir = "lightning_logs"
 
     if not os.path.exists(lightning_logs_dir):
-        st.info("ℹ️ No training logs found yet.")
+        st.info("No training logs found yet.")
         return
 
     # Get all version directories and sort by modification time
@@ -1387,7 +1383,7 @@ def display_training_stats(config):
         d for d in os.listdir(lightning_logs_dir) if d.startswith("version_")
     ]
     if not version_dirs:
-        st.info("ℹ️ No training logs found yet.")
+        st.info("No training logs found yet.")
         return
 
     # Get the most recent version directory
@@ -1510,11 +1506,11 @@ def display_training_stats(config):
 
 def inference_results():
     """Step 5: Inference and Results"""
-    st.header("📊 Step 5: Inference & Results")
+    st.header("Step 5: Inference & Results")
 
     if not st.session_state.config:
         st.error("❌ Configuration not found!")
-        st.info("💡 Please complete Step 1 (Setup & Configuration) first.")
+        st.info("Please complete Step 1 (Setup & Configuration) first.")
         return
 
     config = st.session_state.config
@@ -1524,7 +1520,7 @@ def inference_results():
     if not os.path.exists(checkpoint_dir):
         st.error(f"❌ Checkpoint directory not found: `{checkpoint_dir}`")
         st.info(
-            "💡 Please complete Step 5 (Model Training) to generate model checkpoints."
+            "Please complete Step 5 (Model Training) to generate model checkpoints."
         )
 
         if not st.session_state.training_done:
@@ -1535,7 +1531,7 @@ def inference_results():
     if not checkpoint_files:
         st.error(f"❌ No checkpoint files found in `{checkpoint_dir}`")
         st.info(
-            "💡 Please complete Step 5 (Model Training) to generate model checkpoints."
+            "Please complete Step 5 (Model Training) to generate model checkpoints."
         )
         return
 
@@ -1545,7 +1541,7 @@ def inference_results():
         for ckpt in sorted(checkpoint_files):
             st.write(f"- `{ckpt}`")
 
-    st.subheader("🔮 Generate Results")
+    st.subheader("Generate Results")
 
     # Add softmax toggle
     col1, col2 = st.columns([2, 1])
@@ -1558,12 +1554,12 @@ def inference_results():
     with col2:
         st.write("")  # Spacing
 
-    if st.button("🚀 Run Inference", type="primary"):
+    if st.button("Run Inference", type="primary"):
         try:
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            status_text.text("🔮 Running inference...")
+            status_text.text("Running inference...")
             progress_bar.progress(25)
 
             config_file = f"{config['project_name']}.yaml"
