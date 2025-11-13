@@ -19,36 +19,33 @@ def save_h5_diffraction_to_png(
     """
     Save individual 2D diffraction patterns from a 4D STEM HDF5 file to PNG.
 
-    Output directory will be created in the same path as the input file:
+    Output directory will be created at the output_file_path:
     Example:
-    h5_file/
-    - example.h5
-    - example_png_bin1/
-        - example_0_0.png
-        - example_0_1.png
+    output_file_path/
+        - basename_0_0.png
+        - basename_0_1.png
+        - basename_1_0.png
+        - basename_1_1.png
         - ...
 
     Args:
     - h5_file: Path to HDF5 file
-    - output_file_path: Base output path (same as input filename typically)
-    - dataset_key: Dataset name inside HDF5 (default is "slice")
+    - output_file_path: Output directory path
+    - dataset_key: Dataset name inside HDF5 (default is "frame")
     - crop_values: (x_min, x_max, y_min, y_max) crop window
     - crop: Enable cropping
     - binning_param: Integer factor for downsampling
     """
-    assert h5_file.endswith(".h5"), "Input file must be an .h5 file"
+    assert h5_file.endswith(".h5") or h5_file.endswith(
+        ".hdf5"
+    ), "Input file must be an HDF5 file (.h5 or .hdf5)"
     # if the file does not exist fail quietly
     if not os.path.isfile(h5_file):
         print(f"File does not exist: {h5_file}")
         return
 
-    if crop:
-        output_dir = os.path.join(
-            output_file_path + "_png_cropped_bin" + str(binning_param)
-        )
-    else:
-        output_dir = os.path.join(output_file_path + "_png_bin" + str(binning_param))
-
+    # Use output_file_path directly as the output directory
+    output_dir = output_file_path
     os.makedirs(output_dir, exist_ok=True)
     base_file_name = os.path.splitext(os.path.basename(h5_file))[0]
 
@@ -75,7 +72,8 @@ def save_h5_diffraction_to_png(
                             binning_param,
                         ).mean(axis=(1, 3))
 
-                    filename = os.path.join(output_dir, f"{j}_{i}_{base_file_name}.png")
+                    # Match DM4 filename format: basename_row_col.png
+                    filename = os.path.join(output_dir, f"{base_file_name}_{i}_{j}.png")
                     plt.imsave(filename, pattern, cmap="gray", format="png")  # type: ignore
 
     except Exception as e:

@@ -20,6 +20,7 @@ sys.path.append(str(Path(__file__).parent))
 try:
     from scripts.create_average_boxes import convert_all_to_boxes
     from scripts.dm4_to_png import export_dm4_bf_images_to_png
+    from scripts.hdf5_to_png import save_h5_diffraction_to_png
     from scripts.streamlit_labeller import (
         StreamlitLabellerState,
         get_label_statistics,
@@ -72,7 +73,7 @@ def main():
     # Header
     st.title("👻 Ghost Hunter: Interactive ML Pipeline")
     st.markdown(
-        "**Transform DM4 files → Label data → Train models → Generate insights**"
+        "**Transform DM4/HDF5 files → Label data → Train models → Generate insights**"
     )
 
     # Sidebar with status indicators
@@ -291,17 +292,19 @@ def setup_configuration():
             st.success(f"✅ Found {boxed_count} boxed images in `{boxed_path}`")
 
     # File path input
-    st.subheader("📁 Specify DM4 File Path")
+    st.subheader("📁 Specify Data File Path")
 
-    # Make DM4 optional if project exists
-    help_text = "Example: /home/user/data/experiment.dm4"
+    # Make file path optional if project exists
+    help_text = (
+        "Example: /home/user/data/experiment.dm4 or /home/user/data/experiment.h5"
+    )
     if project_exists:
         help_text += (
             " (Optional for existing projects - leave blank to skip conversion steps)"
         )
 
     dm4_file_path = st.text_input(
-        "Enter the full path to your DM4 file",
+        "Enter the full path to your DM4 or HDF5 (.h5) file",
         value="",
         key="dm4_file_path",
         help=help_text,
@@ -406,19 +409,25 @@ def setup_configuration():
 
     # Validate file path (optional for existing projects)
     dm4_file_valid = False
+    file_type = None  # Track file type: 'dm4' or 'h5'
     n_cols = None  # Initialize dimension variables
     n_rows = None
     if dm4_file_path:
         if os.path.exists(dm4_file_path):
             if dm4_file_path.endswith(".dm4"):
                 dm4_file_valid = True
+                file_type = "dm4"
                 st.success(f"✅ Valid DM4 file: `{os.path.basename(dm4_file_path)}`")
+            elif dm4_file_path.endswith(".h5") or dm4_file_path.endswith(".hdf5"):
+                dm4_file_valid = True
+                file_type = "h5"
+                st.success(f"✅ Valid HDF5 file: `{os.path.basename(dm4_file_path)}`")
             else:
                 st.error(
-                    "❌ Invalid file type! Please provide a file with `.dm4` extension."
+                    "❌ Invalid file type! Please provide a file with `.dm4`, `.h5`, or `.hdf5` extension."
                 )
                 st.info(
-                    "Tip: Make sure your file path ends with `.dm4` (e.g., `/path/to/data.dm4`)"
+                    "Tip: Make sure your file path ends with `.dm4` or `.h5` (e.g., `/path/to/data.dm4` or `/path/to/data.h5`)"
                 )
         else:
             st.error(f"❌ File not found at the specified path: `{dm4_file_path}`")
@@ -427,61 +436,129 @@ def setup_configuration():
             )
     elif not project_exists:
         st.warning(
-            "⚠️ DM4 file path is required for new projects. Please provide a valid path above."
+            "⚠️ Data file path is required for new projects. Please provide a valid path above."
         )
-        st.info("If you're loading an existing project, the DM4 file is optional.")
+        st.info("If you're loading an existing project, the data file is optional.")
 
-    # Show DM4 info and images if valid path provided
+    # Show file info and images if valid path provided
     if dm4_file_valid:
-        st.info("Preview: Random diffraction image and virtual image from DM4 file")
-        temp_dm4_path = dm4_file_path
+        if file_type == "dm4":
+            st.info("Preview: Random diffraction image and virtual image from DM4 file")
+            temp_dm4_path = dm4_file_path
 
-        # Get dataset info and show dimensions
-        import py4DSTEM
+            # Get dataset info and show dimensions
+            import py4DSTEM
 
-        try:
-            dataset = py4DSTEM.import_file(temp_dm4_path)  # type: ignore
-            shape = dataset.data.shape  # type: ignore
-            n_rows = shape[0]
-            n_cols = shape[1]
+            try:
+                dataset = py4DSTEM.import_file(temp_dm4_path)  # type: ignore
+                shape = dataset.data.shape  # type: ignore
+                n_rows = shape[0]
+                n_cols = shape[1]
 
-            diffraction_image_size = dataset.data[0][0].shape  # type: ignore
+                diffraction_image_size = dataset.data[0][0].shape  # type: ignore
 
-            st.write(
-                f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
-            )
-            st.write(
-                f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
-            )
+                st.write(
+                    f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
+                )
+                st.write(
+                    f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
+                )
 
-            # Create a figure with two subplots side by side
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+                # Create a figure with two subplots side by side
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
-            # Load dataset and show random diffraction pattern
-            random_i = random.randint(0, shape[0] - 1)
-            random_j = random.randint(0, shape[1] - 1)
-            diffraction_pattern = dataset[random_i, random_j].data  # type: ignore
+                # Load dataset and show random diffraction pattern
+                random_i = random.randint(0, shape[0] - 1)
+                random_j = random.randint(0, shape[1] - 1)
+                diffraction_pattern = dataset[random_i, random_j].data  # type: ignore
 
-            im1 = ax1.imshow(diffraction_pattern, cmap="gray")
-            ax1.set_title(f"Random Diffraction Pattern\nat ({random_i}, {random_j})")
-            ax1.set_xlabel("Detector X (pixels)")
-            ax1.set_ylabel("Detector Y (pixels)")
-            plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
+                im1 = ax1.imshow(diffraction_pattern, cmap="gray")
+                ax1.set_title(
+                    f"Random Diffraction Pattern\nat ({random_i}, {random_j})"
+                )
+                ax1.set_xlabel("Detector X (pixels)")
+                ax1.set_ylabel("Detector Y (pixels)")
+                plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
 
-            # Create virtual image
-            virtual_image = dataset.data.sum(axis=(2, 3))  # type: ignore
+                # Create virtual image
+                virtual_image = dataset.data.sum(axis=(2, 3))  # type: ignore
 
-            im2 = ax2.imshow(virtual_image, cmap="gray")
-            ax2.set_title("Virtual Image\n(summed intensity)")
-            ax2.set_xlabel("Scan X")
-            ax2.set_ylabel("Scan Y")
-            plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
+                im2 = ax2.imshow(virtual_image, cmap="gray")
+                ax2.set_title("Virtual Image\n(summed intensity)")
+                ax2.set_xlabel("Scan X")
+                ax2.set_ylabel("Scan Y")
+                plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
 
-            plt.tight_layout()
-            st.pyplot(fig, width="content")
-            plt.close(fig)
-        except Exception as e:
-            st.warning(f"Could not read DM4 file or display images: {e}")
+                plt.tight_layout()
+                st.pyplot(fig, width="content")
+                plt.close(fig)
+            except Exception as e:
+                st.warning(f"Could not read DM4 file or display images: {e}")
+
+        elif file_type == "h5":
+            st.info("Preview: Random diffraction image from HDF5 file")
+            import h5py
+
+            try:
+                with h5py.File(dm4_file_path, "r") as f:
+                    # Try common dataset keys
+                    dataset_key = None
+                    for key in ["frame", "data", "frames", "images"]:
+                        if key in f:  # type: ignore
+                            dataset_key = key
+                            break
+
+                    if dataset_key is None:
+                        st.warning(f"Available datasets in file: {list(f.keys())}")  # type: ignore
+                        st.info(
+                            "Please specify the dataset key if needed. Common keys are 'frame', 'data', 'frames'."
+                        )
+                        dataset_key = st.text_input(
+                            "Dataset key (default: 'frame')", value="frame"
+                        )
+
+                    if dataset_key in f:  # type: ignore
+                        data = f[dataset_key]  # type: ignore
+                        shape = data.shape  # (scan_y, scan_x, height, width)
+
+                        if len(shape) == 4:
+                            n_rows = shape[0]
+                            n_cols = shape[1]
+                            diffraction_image_size = (shape[2], shape[3])
+
+                            st.write(
+                                f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
+                            )
+                            st.write(
+                                f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
+                            )
+
+                            # Show random diffraction pattern
+                            random_i = random.randint(0, n_rows - 1)
+                            random_j = random.randint(0, n_cols - 1)
+                            diffraction_pattern = data[random_i, random_j, :, :]
+
+                            fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+                            im = ax.imshow(diffraction_pattern, cmap="gray")
+                            ax.set_title(
+                                f"Random Diffraction Pattern\nat ({random_i}, {random_j})"
+                            )
+                            ax.set_xlabel("Detector X (pixels)")
+                            ax.set_ylabel("Detector Y (pixels)")
+                            plt.colorbar(im, ax=ax, label="Intensity", fraction=0.046)
+
+                            plt.tight_layout()
+                            st.pyplot(fig, width="content")
+                            plt.close(fig)
+                        else:
+                            st.warning(
+                                f"Unexpected data shape: {shape}. Expected 4D array (scan_y, scan_x, height, width)"
+                            )
+                    else:
+                        st.error(f"Dataset '{dataset_key}' not found in HDF5 file")
+
+            except Exception as e:
+                st.warning(f"Could not read HDF5 file or display images: {e}")
 
     # Save configuration
     if st.button("Save Configuration & Proceed", type="primary"):
@@ -630,12 +707,12 @@ def setup_configuration():
         elif st.session_state.conversion_done:
             st.info("PNG files found! You can proceed to Step 3: Average Boxing")
         else:
-            st.info("You can now proceed to Step 2: DM4 Conversion")
+            st.info("You can now proceed to Step 2: File Conversion")
 
 
 def dm4_conversion():
-    """Step 2: DM4 to PNG Conversion"""
-    st.header("🔄 Step 2: DM4 to PNG Conversion")
+    """Step 2: Data File to PNG Conversion"""
+    st.header("🔄 Step 2: Data File to PNG Conversion")
 
     if not st.session_state.config:
         st.error("❌ Please complete Step 1 first!")
@@ -683,11 +760,22 @@ def dm4_conversion():
 
         crop_values = (x_min, x_max, y_min, y_max)
 
-    if st.button("🚀 Start DM4 Conversion", type="primary"):
+    # HDF5-specific settings
+    dataset_key = "frame"
+    if config.get("dm4_file_path", "").endswith((".h5", ".hdf5")):
+        st.subheader("📊 HDF5 Dataset Settings")
+        dataset_key = st.text_input(
+            "Dataset Key",
+            value="frame",
+            key="h5_dataset_key",
+            help="Name of the dataset in the HDF5 file (common values: 'frame', 'data', 'frames')",
+        )
+
+    if st.button("🚀 Start File Conversion", type="primary"):
         if not config.get("dm4_file_path"):
-            st.error("❌ No DM4 file path found in configuration!")
+            st.error("❌ No data file path found in configuration!")
             st.info(
-                "Please go back to Step 1 and provide a valid DM4 file path, then save the configuration."
+                "Please go back to Step 1 and provide a valid DM4 or HDF5 file path, then save the configuration."
             )
             return
 
@@ -703,10 +791,20 @@ def dm4_conversion():
             dm4_file_path = config["dm4_file_path"]
 
             if not os.path.exists(dm4_file_path):
-                st.error(f"❌ DM4 file not found at: `{dm4_file_path}`")
+                st.error(f"❌ File not found at: `{dm4_file_path}`")
                 st.info(
                     "The file may have been moved or deleted. Please update the path in Step 1."
                 )
+                return
+
+            # Determine file type
+            file_type = None
+            if dm4_file_path.endswith(".dm4"):
+                file_type = "dm4"
+            elif dm4_file_path.endswith((".h5", ".hdf5")):
+                file_type = "h5"
+            else:
+                st.error("❌ Unsupported file type. Please use .dm4 or .h5 files.")
                 return
 
             # Progress tracking
@@ -714,23 +812,32 @@ def dm4_conversion():
             status_text = st.empty()
 
             status_text.text(
-                "🔄 Converting DM4 to PNG format... This may take a few minutes."
+                f"🔄 Converting {file_type.upper()} to PNG format... This may take a few minutes."
             )
             progress_bar.progress(50)
 
-            # Call conversion function directly with the file path
-            export_dm4_bf_images_to_png(
-                dm4_file_path,
-                config["output_png_path"],
-                crop=crop_images,
-                crop_values=crop_values,
-            )
+            # Call appropriate conversion function based on file type
+            if file_type == "dm4":
+                export_dm4_bf_images_to_png(
+                    dm4_file_path,
+                    config["output_png_path"],
+                    crop=crop_images,
+                    crop_values=crop_values,
+                )
+            elif file_type == "h5":
+                save_h5_diffraction_to_png(
+                    dm4_file_path,
+                    config["output_png_path"],
+                    dataset_key=dataset_key,
+                    crop=crop_images,
+                    crop_values=crop_values,
+                )
 
             progress_bar.progress(100)
             status_text.text("✅ Conversion completed successfully!")
 
             st.session_state.conversion_done = True
-            st.success("DM4 conversion completed! Ready for average boxing.")
+            st.success("File conversion completed! Ready for average boxing.")
 
         except Exception as e:
             st.error(f"❌ Error during conversion: {str(e)}")
@@ -745,7 +852,7 @@ def average_boxing():
         return
 
     if not st.session_state.conversion_done:
-        st.warning("⚠️ Please complete DM4 conversion first!")
+        st.warning("⚠️ Please complete file conversion first!")
         return
 
     config = st.session_state.config

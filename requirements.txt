@@ -14,3 +14,4 @@ pyyaml
 pillow
 fire
 py4DSTEM
+h5py
