@@ -44,6 +44,7 @@ ignore = [
     "B008",   # Do not perform function call in argument defaults
     "B905",   # zip() without an explicit strict= parameter
     "N812",   # Lowercase imported as non-lowercase
+    "E722",   # bare except 
     "SIM108", # Use ternary operator instead of if-else (sometimes less readable)
     "W293",
     "RUF001",

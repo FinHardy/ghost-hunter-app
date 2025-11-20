@@ -303,12 +303,80 @@ def setup_configuration():
             " (Optional for existing projects - leave blank to skip conversion steps)"
         )
 
-    dm4_file_path = st.text_input(
-        "Enter the full path to your DM4 or HDF5 (.h5) file",
-        value="",
-        key="dm4_file_path",
-        help=help_text,
-    )
+    # Add tabs for file selection method
+    tab_browse, tab_manual = st.tabs(["📂 Browse Files", "📝 Manual Path Entry"])
+
+    dm4_file_path = ""
+
+    with tab_browse:
+        st.markdown("**Select your data file from the filesystem**")
+        st.caption("💡 Navigate to your file using your system's file browser")
+
+        # Provide a directory browser hint
+        browse_dir = st.text_input(
+            "Start browsing from directory (optional)",
+            value=os.path.expanduser("~"),
+            key="browse_start_dir",
+            help="Enter a directory path to start browsing from, or leave as home directory",
+        )
+
+        if os.path.isdir(browse_dir):
+            # List files in the directory
+            try:
+                all_files = []
+                for root, dirs, files in os.walk(browse_dir):
+                    # Only go one level deep to avoid performance issues
+                    if root == browse_dir:
+                        for file in files:
+                            if file.endswith((".dm4", ".h5", ".hdf5")):
+                                all_files.append(os.path.join(root, file))
+                        for dir_name in dirs[:20]:  # Limit subdirectories shown
+                            dir_path = os.path.join(root, dir_name)
+                            for file in os.listdir(dir_path):
+                                if file.endswith((".dm4", ".h5", ".hdf5")):
+                                    all_files.append(os.path.join(dir_path, file))
+
+                if all_files:
+                    all_files.sort()
+                    # Create display names (show relative path from browse_dir)
+                    display_files = [os.path.relpath(f, browse_dir) for f in all_files]
+
+                    selected_file = st.selectbox(
+                        f"Found {len(all_files)} data file(s) - Select one:",
+                        options=range(len(all_files)),
+                        format_func=lambda i: f"{display_files[i]} ({os.path.getsize(all_files[i]) / (1024*1024):.2f} MB)",
+                        key="file_selector",
+                    )
+
+                    if selected_file is not None:
+                        dm4_file_path = all_files[selected_file]
+                        st.success(
+                            f"✅ Selected: **{os.path.basename(dm4_file_path)}**"
+                        )
+                        st.code(dm4_file_path, language="")
+                else:
+                    st.info(
+                        f"No .dm4, .h5, or .hdf5 files found in {browse_dir} or immediate subdirectories"
+                    )
+                    st.caption(
+                        "Try entering the full file path in the 'Manual Path Entry' tab, or change the browse directory above"
+                    )
+            except PermissionError:
+                st.error(f"❌ Permission denied accessing {browse_dir}")
+            except Exception as e:
+                st.error(f"❌ Error browsing directory: {e}")
+        else:
+            st.warning(f"⚠️ Directory not found: {browse_dir}")
+
+    with tab_manual:
+        dm4_file_path_manual = st.text_input(
+            "Enter the full path to your DM4 or HDF5 (.h5) file",
+            value="",
+            key="dm4_file_path_manual",
+            help=help_text,
+        )
+        if dm4_file_path_manual:
+            dm4_file_path = dm4_file_path_manual
 
     st.subheader("Training Parameters")
 
@@ -457,11 +525,12 @@ def setup_configuration():
 
                 diffraction_image_size = dataset.data[0][0].shape  # type: ignore
 
+                st.success(f"✅ Detected 4D-STEM data shape: `{shape}`")
                 st.write(
-                    f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
+                    f"**Real space scan grid:** {n_cols} x {n_rows} = {n_cols * n_rows} positions"
                 )
                 st.write(
-                    f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
+                    f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} pixels"
                 )
 
                 # Create a figure with two subplots side by side
@@ -501,61 +570,221 @@ def setup_configuration():
 
             try:
                 with h5py.File(dm4_file_path, "r") as f:
+                    # Display HDF5 metadata tree
+                    with st.expander("📊 HDF5 File Metadata Tree", expanded=True):
+                        st.markdown("### Complete HDF5 File Structure")
+                        st.markdown(
+                            "Use this tree to locate your data and copy the exact path."
+                        )
+
+                        def build_h5_tree(group, prefix="", path=""):
+                            """Recursively build HDF5 tree structure with full paths"""
+                            tree_lines = []
+                            items = list(group.items())
+
+                            for idx, (key, item) in enumerate(items):
+                                is_last = idx == len(items) - 1
+                                connector = "└── " if is_last else "├── "
+                                next_prefix = prefix + ("    " if is_last else "│   ")
+                                current_path = f"{path}/{key}" if path else key
+
+                                if isinstance(item, h5py.Dataset):
+                                    # Dataset information
+                                    shape_str = f"{item.shape}"
+                                    dtype_str = f"{item.dtype}"
+                                    size_mb = (
+                                        item.size * item.dtype.itemsize / (1024 * 1024)
+                                    )
+
+                                    tree_lines.append(
+                                        f"{prefix}{connector}📄 **{key}** `[Dataset]`"
+                                    )
+                                    tree_lines.append(
+                                        f"{next_prefix}📐 Shape: `{shape_str}` | Type: `{dtype_str}` | Size: `{size_mb:.2f} MB`"
+                                    )
+                                    tree_lines.append(
+                                        f"{next_prefix}📎 Path: `{current_path}`"
+                                    )
+
+                                    # Show attributes if any
+                                    if len(item.attrs) > 0:
+                                        tree_lines.append(
+                                            f"{next_prefix}⚙️ Attributes ({len(item.attrs)}):"
+                                        )
+                                        for attr_idx, (attr_key, attr_val) in enumerate(
+                                            list(item.attrs.items())[:5]
+                                        ):
+                                            val_str = str(attr_val)
+                                            if len(val_str) > 60:
+                                                val_str = val_str[:57] + "..."
+                                            attr_connector = (
+                                                "└─"
+                                                if attr_idx
+                                                == min(len(item.attrs) - 1, 4)
+                                                else "├─"
+                                            )
+                                            tree_lines.append(
+                                                f"{next_prefix}   {attr_connector} `{attr_key}`: {val_str}"
+                                            )
+                                        if len(item.attrs) > 5:
+                                            tree_lines.append(
+                                                f"{next_prefix}   └─ ... and {len(item.attrs) - 5} more attributes"
+                                            )
+
+                                elif isinstance(item, h5py.Group):
+                                    # Group information
+                                    num_children = len(item.keys())
+                                    tree_lines.append(
+                                        f"{prefix}{connector}📁 **{key}** `[Group - {num_children} items]`"
+                                    )
+                                    tree_lines.append(
+                                        f"{next_prefix}📎 Path: `{current_path}`"
+                                    )
+
+                                    # Show group attributes if any
+                                    if len(item.attrs) > 0:
+                                        tree_lines.append(
+                                            f"{next_prefix}⚙️ Attributes ({len(item.attrs)}):"
+                                        )
+                                        for attr_idx, (attr_key, attr_val) in enumerate(
+                                            list(item.attrs.items())[:3]
+                                        ):
+                                            val_str = str(attr_val)
+                                            if len(val_str) > 60:
+                                                val_str = val_str[:57] + "..."
+                                            attr_connector = (
+                                                "└─"
+                                                if attr_idx
+                                                == min(len(item.attrs) - 1, 2)
+                                                else "├─"
+                                            )
+                                            tree_lines.append(
+                                                f"{next_prefix}   {attr_connector} `{attr_key}`: {val_str}"
+                                            )
+                                        if len(item.attrs) > 3:
+                                            tree_lines.append(
+                                                f"{next_prefix}   └─ ... and {len(item.attrs) - 3} more attributes"
+                                            )
+
+                                    # Recurse into subgroups
+                                    tree_lines.extend(
+                                        build_h5_tree(item, next_prefix, current_path)
+                                    )
+
+                            return tree_lines
+
+                        # Build the complete tree
+                        st.markdown(f"📦 **Root:** `{os.path.basename(dm4_file_path)}`")
+
+                        # Show file-level attributes first
+                        if len(f.attrs) > 0:
+                            st.markdown(
+                                f"⚙️ **File-level Attributes ({len(f.attrs)}):**"
+                            )
+                            for attr_key, attr_val in list(f.attrs.items())[:5]:
+                                val_str = str(attr_val)
+                                if len(val_str) > 80:
+                                    val_str = val_str[:77] + "..."
+                                st.markdown(f"  └─ `{attr_key}`: {val_str}")
+                            if len(f.attrs) > 5:
+                                st.markdown(
+                                    f"  └─ ... and {len(f.attrs) - 5} more attributes"
+                                )
+                            st.markdown("")
+
+                        # Display the tree
+                        tree_lines = build_h5_tree(f)
+                        for line in tree_lines:
+                            st.markdown(line)
+
+                        st.info(
+                            "💡 **Tip:** Copy the path shown (e.g., `group/subgroup/dataset`) to use in the dataset path field below."
+                        )
+
                     # Try common dataset keys
                     dataset_key = None
                     for key in ["frame", "data", "frames", "images"]:
                         if key in f:  # type: ignore
-                            dataset_key = key
-                            break
+                            item = f[key]  # type: ignore
+                            # Check if it's actually a dataset, not a group
+                            if isinstance(item, h5py.Dataset):
+                                dataset_key = key
+                                break
 
                     if dataset_key is None:
-                        st.warning(f"Available datasets in file: {list(f.keys())}")  # type: ignore
+                        st.warning(
+                            f"Available root-level keys in file: {list(f.keys())}"
+                        )  # type: ignore
                         st.info(
-                            "Please specify the dataset key if needed. Common keys are 'frame', 'data', 'frames'."
+                            "Please specify the dataset path. Use the tree view above to find the exact path to your 4D data array."
                         )
                         dataset_key = st.text_input(
-                            "Dataset key (default: 'frame')", value="frame"
+                            "Dataset path (e.g., 'frame', 'data', or 'group/dataset')",
+                            value="frame",
+                            help="Enter the full path to the dataset as shown in the tree above",
                         )
 
-                    if dataset_key in f:  # type: ignore
+                    # Try to access the dataset
+                    try:
                         data = f[dataset_key]  # type: ignore
-                        shape = data.shape  # (scan_y, scan_x, height, width)
 
-                        if len(shape) == 4:
-                            n_rows = shape[0]
-                            n_cols = shape[1]
-                            diffraction_image_size = (shape[2], shape[3])
-
-                            st.write(
-                                f"**Real space image dimensions:** {n_cols} x {n_rows} (scan positions)"
+                        # Check if it's actually a dataset
+                        if not isinstance(data, h5py.Dataset):
+                            st.error(
+                                f"❌ '{dataset_key}' is a {type(data).__name__}, not a Dataset. Please use the tree view above to find the actual dataset path."
                             )
-                            st.write(
-                                f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} (detector pixels)"
-                            )
-
-                            # Show random diffraction pattern
-                            random_i = random.randint(0, n_rows - 1)
-                            random_j = random.randint(0, n_cols - 1)
-                            diffraction_pattern = data[random_i, random_j, :, :]
-
-                            fig, ax = plt.subplots(1, 1, figsize=(6, 5))
-                            im = ax.imshow(diffraction_pattern, cmap="gray")
-                            ax.set_title(
-                                f"Random Diffraction Pattern\nat ({random_i}, {random_j})"
-                            )
-                            ax.set_xlabel("Detector X (pixels)")
-                            ax.set_ylabel("Detector Y (pixels)")
-                            plt.colorbar(im, ax=ax, label="Intensity", fraction=0.046)
-
-                            plt.tight_layout()
-                            st.pyplot(fig, width="content")
-                            plt.close(fig)
                         else:
-                            st.warning(
-                                f"Unexpected data shape: {shape}. Expected 4D array (scan_y, scan_x, height, width)"
+                            shape = data.shape  # (scan_y, scan_x, height, width)
+
+                            st.success(f"✅ Found dataset at '{dataset_key}'")
+                            st.write(
+                                f"**Full dataset shape:** `{shape}` (should be 4D: scan_y, scan_x, detector_height, detector_width)"
                             )
-                    else:
-                        st.error(f"Dataset '{dataset_key}' not found in HDF5 file")
+
+                            if len(shape) == 4:
+                                n_rows = shape[0]
+                                n_cols = shape[1]
+                                diffraction_image_size = (shape[2], shape[3])
+
+                                st.success(
+                                    "✅ Detected 4D-STEM data - Shape interpretation:"
+                                )
+                                st.write(
+                                    f"**Real space scan grid:** {n_cols} x {n_rows} = {n_cols * n_rows} positions (from shape[1] x shape[0])"
+                                )
+                                st.write(
+                                    f"**Diffraction pattern size:** {diffraction_image_size[1]} x {diffraction_image_size[0]} pixels (from shape[3] x shape[2])"
+                                )
+
+                                # Show random diffraction pattern
+                                random_i = random.randint(0, n_rows - 1)
+                                random_j = random.randint(0, n_cols - 1)
+                                diffraction_pattern = data[random_i, random_j, :, :]
+
+                                fig, ax = plt.subplots(1, 1, figsize=(6, 5))
+                                im = ax.imshow(diffraction_pattern, cmap="gray")
+                                ax.set_title(
+                                    f"Random Diffraction Pattern\nat ({random_i}, {random_j})"
+                                )
+                                ax.set_xlabel("Detector X (pixels)")
+                                ax.set_ylabel("Detector Y (pixels)")
+                                plt.colorbar(
+                                    im, ax=ax, label="Intensity", fraction=0.046
+                                )
+
+                                plt.tight_layout()
+                                st.pyplot(fig, width="content")
+                                plt.close(fig)
+                            else:
+                                st.warning(
+                                    f"Unexpected data shape: {shape}. Expected 4D array (scan_y, scan_x, height, width)"
+                                )
+                    except KeyError:
+                        st.error(
+                            f"❌ Dataset '{dataset_key}' not found in HDF5 file. Please check the tree view above for the correct path."
+                        )
+                    except Exception as e:
+                        st.error(f"❌ Error accessing dataset: {e}")
 
             except Exception as e:
                 st.warning(f"Could not read HDF5 file or display images: {e}")
@@ -725,6 +954,137 @@ def dm4_conversion():
         st.json(config)
 
     st.subheader("🛠️ Conversion Settings")
+
+    # Image enhancement options
+    st.markdown("**Image Enhancement Options**")
+    col_enhance1, col_enhance2, col_enhance3 = st.columns(3)
+
+    with col_enhance1:
+        use_log_scale = st.checkbox(
+            "📈 Log Scaling",
+            key="use_log_scale",
+            value=False,
+            help="Apply logarithmic scaling to enhance visibility of ghost disks and low-intensity features",
+        )
+
+    with col_enhance2:
+        use_histogram_equalization = st.checkbox(
+            "📊 Histogram Equalization",
+            key="use_histogram_eq",
+            value=False,
+            help="Improve contrast by redistributing intensity values",
+        )
+
+    with col_enhance3:
+        use_gamma_correction = st.checkbox(
+            "🔆 Gamma Correction",
+            key="use_gamma",
+            value=False,
+            help="Adjust brightness using gamma correction",
+        )
+
+    gamma_value = 1.0
+    if use_gamma_correction:
+        gamma_value = st.slider(
+            "Gamma Value",
+            min_value=0.1,
+            max_value=3.0,
+            value=1.0,
+            step=0.1,
+            key="gamma_value",
+            help="Values < 1 brighten the image, values > 1 darken it",
+        )
+
+    # Show preview if any enhancement is selected
+    if use_log_scale or use_histogram_equalization or use_gamma_correction:
+        with st.expander("🔍 Preview Enhancement Effects", expanded=True):
+            st.markdown("**Live Preview: Original vs Enhanced**")
+
+            # Try to load a sample diffraction pattern
+            try:
+                dm4_file = config.get("dm4_file_path", "")
+                mid_i, mid_j = 0, 0  # Initialize for caption
+                sample_pattern = None
+
+                if dm4_file and os.path.exists(dm4_file):
+                    if dm4_file.endswith(".dm4"):
+                        import py4DSTEM
+
+                        dataset = py4DSTEM.import_file(dm4_file)  # type: ignore
+                        # Get a pattern from middle of scan
+                        mid_i = dataset.data.shape[0] // 2  # type: ignore
+                        mid_j = dataset.data.shape[1] // 2  # type: ignore
+                        sample_pattern = dataset.data[mid_i, mid_j].copy()  # type: ignore
+                    elif dm4_file.endswith((".h5", ".hdf5")):
+                        import h5py
+
+                        dataset_key_preview = st.session_state.get(
+                            "h5_dataset_key", "frame"
+                        )
+                        with h5py.File(dm4_file, "r") as f:
+                            try:
+                                data = f[dataset_key_preview]  # type: ignore
+                                if (
+                                    isinstance(data, h5py.Dataset)
+                                    and len(data.shape) == 4
+                                ):
+                                    mid_i = data.shape[0] // 2
+                                    mid_j = data.shape[1] // 2
+                                    sample_pattern = data[mid_i, mid_j, :, :].copy()  # type: ignore
+                                else:
+                                    raise ValueError("Invalid dataset shape")
+                            except:
+                                st.warning(
+                                    "Could not load preview from HDF5. Using synthetic pattern."
+                                )
+                                sample_pattern = np.random.rand(256, 256) * 1000
+
+                if sample_pattern is not None:
+                    # Apply enhancements
+                    from scripts.hdf5_to_png import apply_image_enhancements
+
+                    enhanced_pattern = apply_image_enhancements(
+                        sample_pattern,
+                        use_log_scale=use_log_scale,
+                        use_histogram_eq=use_histogram_equalization,
+                        gamma=gamma_value if use_gamma_correction else None,
+                    )
+
+                    # Display side by side
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+                    im1 = ax1.imshow(sample_pattern, cmap="gray")
+                    ax1.set_title("Original", fontsize=14, fontweight="bold")
+                    ax1.set_xlabel("X (pixels)")
+                    ax1.set_ylabel("Y (pixels)")
+                    plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
+
+                    im2 = ax2.imshow(enhanced_pattern, cmap="gray")
+                    enhancements = []
+                    if use_log_scale:
+                        enhancements.append("Log")
+                    if use_histogram_equalization:
+                        enhancements.append("HistEq")
+                    if use_gamma_correction:
+                        enhancements.append(f"γ={gamma_value:.1f}")
+                    title = "Enhanced: " + " + ".join(enhancements)
+                    ax2.set_title(title, fontsize=14, fontweight="bold")
+                    ax2.set_xlabel("X (pixels)")
+                    ax2.set_ylabel("Y (pixels)")
+                    plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
+
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close(fig)
+
+                    st.caption(f"📍 Sample from scan position ({mid_i}, {mid_j})")
+                else:
+                    st.info("No file loaded for preview")
+            except Exception as e:
+                st.warning(f"Could not generate preview: {e}")
+
+    st.divider()
+
     crop_images = st.checkbox(
         "Crop Images",
         key="crop_images",
@@ -759,6 +1119,119 @@ def dm4_conversion():
             st.warning("⚠️ Crop region is very small. Make sure this is intentional.")
 
         crop_values = (x_min, x_max, y_min, y_max)
+
+        # Show crop preview
+        if x_min < x_max and y_min < y_max:
+            with st.expander("✂️ Preview Crop Region", expanded=True):
+                st.markdown("**Live Preview: Full Image vs Cropped Region**")
+
+                try:
+                    dm4_file = config.get("dm4_file_path", "")
+                    mid_i, mid_j = 0, 0
+                    sample_pattern = None
+
+                    if dm4_file and os.path.exists(dm4_file):
+                        if dm4_file.endswith(".dm4"):
+                            import py4DSTEM
+
+                            dataset = py4DSTEM.import_file(dm4_file)  # type: ignore
+                            mid_i = dataset.data.shape[0] // 2  # type: ignore
+                            mid_j = dataset.data.shape[1] // 2  # type: ignore
+                            sample_pattern = dataset.data[mid_i, mid_j].copy()  # type: ignore
+                        elif dm4_file.endswith((".h5", ".hdf5")):
+                            import h5py
+
+                            dataset_key_preview = st.session_state.get(
+                                "h5_dataset_key", "frame"
+                            )
+                            with h5py.File(dm4_file, "r") as f:
+                                try:
+                                    data = f[dataset_key_preview]  # type: ignore
+                                    if (
+                                        isinstance(data, h5py.Dataset)
+                                        and len(data.shape) == 4
+                                    ):
+                                        mid_i = data.shape[0] // 2
+                                        mid_j = data.shape[1] // 2
+                                        sample_pattern = data[mid_i, mid_j, :, :].copy()  # type: ignore
+                                except:
+                                    st.warning("Could not load preview from HDF5.")
+                                    sample_pattern = None
+
+                    if sample_pattern is not None:
+                        # Check if crop values are valid for this image
+                        img_height, img_width = sample_pattern.shape
+
+                        if x_max > img_width or y_max > img_height:
+                            st.error(
+                                f"❌ Crop values exceed image dimensions! Image size: {img_width} x {img_height}"
+                            )
+                        else:
+                            # Apply crop
+                            cropped_pattern = sample_pattern[y_min:y_max, x_min:x_max]
+
+                            # Display side by side
+                            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+                            # Full image with crop rectangle overlay
+                            im1 = ax1.imshow(sample_pattern, cmap="gray")
+                            ax1.set_title(
+                                "Full Image with Crop Region",
+                                fontsize=14,
+                                fontweight="bold",
+                            )
+                            ax1.set_xlabel("X (pixels)")
+                            ax1.set_ylabel("Y (pixels)")
+
+                            # Draw rectangle showing crop region
+                            from matplotlib.patches import Rectangle
+
+                            rect = Rectangle(
+                                (x_min, y_min),
+                                x_max - x_min,
+                                y_max - y_min,
+                                linewidth=2,
+                                edgecolor="red",
+                                facecolor="none",
+                                linestyle="--",
+                            )
+                            ax1.add_patch(rect)
+                            ax1.text(
+                                x_min,
+                                y_min - 5,
+                                "Crop Region",
+                                color="red",
+                                fontsize=10,
+                                fontweight="bold",
+                                va="bottom",
+                            )
+
+                            plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
+
+                            # Cropped image
+                            im2 = ax2.imshow(cropped_pattern, cmap="gray")
+                            crop_size_str = f"{x_max - x_min} × {y_max - y_min}"
+                            ax2.set_title(
+                                f"Cropped Image ({crop_size_str} px)",
+                                fontsize=14,
+                                fontweight="bold",
+                            )
+                            ax2.set_xlabel("X (pixels)")
+                            ax2.set_ylabel("Y (pixels)")
+                            plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
+
+                            plt.tight_layout()
+                            st.pyplot(fig)
+                            plt.close(fig)
+
+                            st.caption(
+                                f"📍 Sample from scan position ({mid_i}, {mid_j}) | Original: {img_width} × {img_height} px → Cropped: {crop_size_str} px"
+                            )
+                    else:
+                        st.info("No file loaded for crop preview")
+
+                except Exception as e:
+                    st.warning(f"Could not generate crop preview: {e}")
 
     # HDF5-specific settings
     dataset_key = "frame"
@@ -823,6 +1296,9 @@ def dm4_conversion():
                     config["output_png_path"],
                     crop=crop_images,
                     crop_values=crop_values,
+                    use_log_scale=use_log_scale,
+                    use_histogram_eq=use_histogram_equalization,
+                    gamma=gamma_value if use_gamma_correction else None,
                 )
             elif file_type == "h5":
                 save_h5_diffraction_to_png(
@@ -831,6 +1307,9 @@ def dm4_conversion():
                     dataset_key=dataset_key,
                     crop=crop_images,
                     crop_values=crop_values,
+                    use_log_scale=use_log_scale,
+                    use_histogram_eq=use_histogram_equalization,
+                    gamma=gamma_value if use_gamma_correction else None,
                 )
 
             progress_bar.progress(100)
@@ -1155,12 +1634,15 @@ def data_labelling():
                 im = ax.imshow(final_heatmap, cmap=cmap, vmin=0, vmax=3)
                 ax.set_title("Final Label Map")
                 ax.axis("off")
-                plt.colorbar(
+                cbar = plt.colorbar(
                     im,
                     ax=ax,
-                    ticks=["No Label", "Horizontal", "Vertical", "No Polarisation"],
+                    ticks=[0, 1, 2, 3],
                     label="Label",
                     fraction=0.046,
+                )
+                cbar.ax.set_yticklabels(
+                    ["No Label", "Horizontal", "Vertical", "No Polarisation"]
                 )
                 plt.tight_layout()
                 st.pyplot(fig, use_container_width=False)

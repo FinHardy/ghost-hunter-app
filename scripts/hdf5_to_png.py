@@ -3,7 +3,52 @@ from typing import Optional
 
 import h5py
 import matplotlib.pyplot as plt
+import numpy as np
 from tqdm import tqdm
+
+
+def apply_image_enhancements(
+    image: np.ndarray,
+    use_log_scale: bool = False,
+    use_histogram_eq: bool = False,
+    gamma: Optional[float] = None,
+) -> np.ndarray:
+    """
+    Apply various image enhancement techniques to improve visibility.
+
+    Args:
+        image: Input image array
+        use_log_scale: Apply logarithmic scaling
+        use_histogram_eq: Apply histogram equalization
+        gamma: Gamma correction value (None for no correction)
+
+    Returns:
+        Enhanced image array
+    """
+    enhanced = image.copy()
+
+    # Apply log scaling (helps with ghost disks)
+    if use_log_scale:
+        # Add small constant to avoid log(0)
+        enhanced = np.log1p(enhanced - enhanced.min() + 1)
+
+    # Normalize to 0-1 range
+    if enhanced.max() > enhanced.min():
+        enhanced = (enhanced - enhanced.min()) / (enhanced.max() - enhanced.min())
+
+    # Apply gamma correction
+    if gamma is not None and gamma != 1.0:
+        enhanced = np.power(enhanced, gamma)
+
+    # Apply histogram equalization
+    if use_histogram_eq:
+        # Simple histogram equalization
+        hist, bins = np.histogram(enhanced.flatten(), bins=256, range=[0, 1])
+        cdf = hist.cumsum()
+        cdf = cdf / cdf[-1]  # Normalize
+        enhanced = np.interp(enhanced.flatten(), bins[:-1], cdf).reshape(enhanced.shape)
+
+    return enhanced
 
 
 def save_h5_diffraction_to_png(
@@ -15,6 +60,9 @@ def save_h5_diffraction_to_png(
     ] = None,  # x_min, x_max, y_min, y_max
     crop: bool = False,
     binning_param: int = 1,
+    use_log_scale: bool = False,
+    use_histogram_eq: bool = False,
+    gamma: Optional[float] = None,
 ):
     """
     Save individual 2D diffraction patterns from a 4D STEM HDF5 file to PNG.
@@ -71,6 +119,14 @@ def save_h5_diffraction_to_png(
                             pattern.shape[1] // binning_param,  # type: ignore
                             binning_param,
                         ).mean(axis=(1, 3))
+
+                    # Apply image enhancements
+                    pattern = apply_image_enhancements(
+                        pattern,  # type: ignore
+                        use_log_scale=use_log_scale,
+                        use_histogram_eq=use_histogram_eq,
+                        gamma=gamma,
+                    )
 
                     # Match DM4 filename format: basename_row_col.png
                     filename = os.path.join(output_dir, f"{base_file_name}_{i}_{j}.png")
