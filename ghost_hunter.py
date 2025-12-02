@@ -17,22 +17,6 @@ import yaml
 # Add src to path to import modules
 sys.path.append(str(Path(__file__).parent))
 
-try:
-    from scripts.create_average_boxes import convert_all_to_boxes
-    from scripts.dm4_to_png import export_dm4_bf_images_to_png
-    from scripts.hdf5_to_png import save_h5_diffraction_to_png
-    from scripts.streamlit_labeller import (
-        StreamlitLabellerState,
-        get_label_statistics,
-        load_existing_labels,
-        save_label,
-    )
-    from src.inference import plot_embeddings
-    from src.run import main as train_model
-except ImportError as e:
-    st.error(f"Error importing modules: {e}")
-    st.stop()
-
 # Page configuration
 st.set_page_config(
     page_title="Ghost Hunter ML Pipeline",
@@ -120,6 +104,9 @@ def main():
     st.divider()
 
     inference_results()
+    st.divider()
+
+    apply_to_new_timeslice()
 
 
 def setup_configuration():
@@ -808,12 +795,20 @@ def setup_configuration():
         n_rows_detected = None
 
         if project_exists:
+            # Import the proper sorting function
+            from scripts.create_average_boxes import logical_sort
+
             # Try to get dimensions from existing files
             if os.path.exists(png_path):
-                png_files = [f for f in os.listdir(png_path) if f.endswith(".png")]
+                png_files = [
+                    os.path.join(png_path, f)
+                    for f in os.listdir(png_path)
+                    if f.endswith(".png")
+                ]
                 if png_files:
-                    # Get dimensions from last file
-                    last_file = sorted(png_files)[-1]
+                    # Use logical_sort for proper numerical sorting
+                    sorted_files, _ = logical_sort(png_files)
+                    last_file = os.path.basename(sorted_files[-1])
                     parts = last_file.replace(".png", "").split("_")
                     if len(parts) >= 3:  # base_row_col format
                         try:
@@ -825,10 +820,15 @@ def setup_configuration():
                             )
 
             elif os.path.exists(boxed_path):
-                boxed_files = [f for f in os.listdir(boxed_path) if f.endswith(".png")]
+                boxed_files = [
+                    os.path.join(boxed_path, f)
+                    for f in os.listdir(boxed_path)
+                    if f.endswith(".png")
+                ]
                 if boxed_files:
-                    # Get dimensions from last boxed file
-                    last_file = sorted(boxed_files)[-1]
+                    # Use logical_sort for proper numerical sorting
+                    sorted_files, _ = logical_sort(boxed_files)
+                    last_file = os.path.basename(sorted_files[-1])
                     parts = last_file.replace(".png", "").split("_")
                     if len(parts) >= 2:  # row_col_boxsize format
                         try:
@@ -900,6 +900,9 @@ def setup_configuration():
             labelling_path = str(config["labelling_path"])
             if os.path.exists(labelling_path):
                 try:
+                    # Lazy import for label loading
+                    from scripts.streamlit_labeller import load_existing_labels
+
                     labels_data = load_existing_labels(labelling_path)
                     num_labels = len(labels_data.get("labels", []))
                     if num_labels >= int(config["number_of_labels"]):  # type: ignore
@@ -1245,6 +1248,10 @@ def dm4_conversion():
         )
 
     if st.button("🚀 Start File Conversion", type="primary"):
+        # Lazy imports
+        from scripts.dm4_to_png import export_dm4_bf_images_to_png
+        from scripts.hdf5_to_png import save_h5_diffraction_to_png
+
         if not config.get("dm4_file_path"):
             st.error("❌ No data file path found in configuration!")
             st.info(
@@ -1388,6 +1395,9 @@ def average_boxing():
         )
 
     if st.button("🚀 Start Average Boxing", type="primary"):
+        # Lazy import
+        from scripts.create_average_boxes import convert_all_to_boxes
+
         # Validate input directory
         if not os.path.exists(config["output_png_path"]):
             st.error(f"❌ Input directory not found: `{config['output_png_path']}`")
@@ -1488,6 +1498,14 @@ def average_boxing():
 def data_labelling():
     """Step 4: Data Labelling - Streamlit Native Interface"""
     st.header("Step 4: Data Labelling")
+
+    # Lazy import
+    from scripts.streamlit_labeller import (
+        StreamlitLabellerState,
+        get_label_statistics,
+        load_existing_labels,
+        save_label,
+    )
 
     if not st.session_state.config:
         st.error("❌ Configuration not found!")
@@ -1772,6 +1790,12 @@ def data_labelling():
     if os.path.exists(config["labelling_path"]):
         with st.expander("View Existing Labels"):
             try:
+                # Lazy imports for label viewing
+                from scripts.streamlit_labeller import (
+                    get_label_statistics,
+                    load_existing_labels,
+                )
+
                 labels_data = load_existing_labels(config["labelling_path"])
                 if labels_data and "labels" in labels_data:
                     num_labels = len(labels_data["labels"])
@@ -1809,6 +1833,12 @@ def model_training():
 
     # Check number of labels
     try:
+        # Lazy imports for label validation
+        from scripts.streamlit_labeller import (
+            get_label_statistics,
+            load_existing_labels,
+        )
+
         labels_data = load_existing_labels(config["labelling_path"])
         num_labels = len(labels_data.get("labels", []))
 
@@ -1882,6 +1912,9 @@ def model_training():
         )
 
     if st.button("🚀 Start Model Training", type="primary"):
+        # Lazy import
+        from src.run import main as train_model
+
         # Validate device availability before training
         selected_device = config.get("device", "cpu")
         try:
@@ -2132,7 +2165,7 @@ def inference_results():
 
     st.subheader("Generate Results")
 
-    # Add softmax toggle
+    # Add softmax toggle and batch size
     col1, col2 = st.columns([2, 1])
     with col1:
         use_softmax = st.checkbox(
@@ -2141,9 +2174,19 @@ def inference_results():
             help="Apply softmax to the model output for probability distribution. Uncheck for raw logits.",
         )
     with col2:
-        st.write("")  # Spacing
+        batch_size = st.number_input(
+            "Batch Size",
+            min_value=1,
+            max_value=256,
+            value=32,
+            step=1,
+            help="Number of images to process together. Larger values are faster but use more memory.",
+        )
 
     if st.button("Run Inference", type="primary"):
+        # Lazy import
+        from src.inference import plot_embeddings
+
         try:
             progress_bar = st.progress(0)
             status_text = st.empty()
@@ -2165,6 +2208,7 @@ def inference_results():
                 config["n_rows"],
                 save_path=config["output_save_path"],
                 with_softmax=use_softmax,
+                batch_size=batch_size,
             )
 
             progress_bar.progress(100)
@@ -2212,6 +2256,906 @@ def display_results(plot_path):
             )
     else:
         st.info("ℹ️ No result image found. Run inference to generate results.")
+
+
+def apply_to_new_timeslice():
+    """Step 6: Apply Trained Model to New Time Slice"""
+    st.header("🔄 Step 6: Apply Model to New Time Slice")
+    st.markdown(
+        "**Reuse a trained model checkpoint to analyze a different time slice from your experiment**"
+    )
+
+    # Check if we have any trained models available
+    checkpoint_base_dir = "checkpoints"
+    if not os.path.exists(checkpoint_base_dir):
+        st.warning("⚠️ No trained models found!")
+        st.info(
+            "Train a model first using Steps 1-5, then return here to apply it to new time slices."
+        )
+        return
+
+    # Find all available projects with checkpoints
+    available_projects = []
+    for project_dir in os.listdir(checkpoint_base_dir):
+        project_path = os.path.join(checkpoint_base_dir, project_dir)
+        if os.path.isdir(project_path):
+            ckpts = [f for f in os.listdir(project_path) if f.endswith(".ckpt")]
+            if ckpts:
+                available_projects.append((project_dir, ckpts))
+
+    if not available_projects:
+        st.warning("⚠️ No trained model checkpoints found!")
+        st.info(
+            "Complete the training process (Steps 1-5) first to generate model checkpoints."
+        )
+        return
+
+    st.success(
+        f"✅ Found {len(available_projects)} trained project(s) with checkpoints"
+    )
+
+    # Section 1: Select Trained Model
+    st.subheader("1️⃣ Select Trained Model Checkpoint")
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        # Project selection
+        project_names = [p[0] for p in available_projects]
+        selected_project = st.selectbox(
+            "Select trained project",
+            options=project_names,
+            key="timeslice_project_select",
+            help="Choose which trained model to use",
+        )
+
+    with col2:
+        # Checkpoint selection for the chosen project
+        project_checkpoints = next(
+            (p[1] for p in available_projects if p[0] == selected_project), []
+        )
+        selected_checkpoint = st.selectbox(
+            "Select checkpoint",
+            options=sorted(project_checkpoints, reverse=True),
+            key="timeslice_checkpoint_select",
+            help="Latest checkpoints appear first. Choose based on validation loss.",
+        )
+
+    # Guard clause for type safety
+    if not selected_project or not selected_checkpoint:
+        st.error("❌ Please select both a project and checkpoint")
+        return
+
+    # Display checkpoint info
+    checkpoint_path = os.path.join(
+        checkpoint_base_dir, selected_project, selected_checkpoint
+    )
+    if os.path.exists(checkpoint_path):
+        file_size_mb = os.path.getsize(checkpoint_path) / (1024 * 1024)
+        mod_time = os.path.getmtime(checkpoint_path)
+        from datetime import datetime
+
+        mod_date = datetime.fromtimestamp(mod_time).strftime("%Y-%m-%d %H:%M:%S")
+
+        with st.expander("📋 Checkpoint Details", expanded=False):
+            st.write(f"**Full Path:** `{checkpoint_path}`")
+            st.write(f"**Size:** {file_size_mb:.2f} MB")
+            st.write(f"**Last Modified:** {mod_date}")
+
+            # Parse checkpoint filename for epoch and loss info
+            try:
+                if selected_checkpoint and isinstance(selected_checkpoint, str):
+                    if "epoch=" in selected_checkpoint:
+                        epoch_part = selected_checkpoint.split("epoch=")[1].split("-")[
+                            0
+                        ]
+                        st.write(f"**Epoch:** {epoch_part}")
+                    if "val_loss=" in selected_checkpoint:
+                        loss_part = selected_checkpoint.split("val_loss=")[1].split(
+                            ".ckpt"
+                        )[0]
+                        st.write(f"**Validation Loss:** {loss_part}")
+            except Exception:
+                pass  # Skip if parsing fails
+
+    st.divider()
+
+    # Section 2: New Time Slice Data
+    st.subheader("2️⃣ Specify New Time Slice Data")
+
+    # New project name for this time slice
+    new_project_name = st.text_input(
+        "New project name for this time slice",
+        value=f"{selected_project}_timeslice",
+        key="new_timeslice_project_name",
+        help="Create a unique name for this time slice analysis",
+    )
+
+    # Validate project name
+    import re
+
+    project_name_valid = False
+    if new_project_name:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", new_project_name):
+            st.error("❌ Invalid characters in name. Use only letters, numbers, _, -")
+        elif len(new_project_name) < 3:
+            st.warning("⚠️ Name too short (min 3 chars)")
+        else:
+            st.success(f"✅ Valid project name: `{new_project_name}`")
+            project_name_valid = True
+
+    # File selection (same as in setup_configuration)
+    st.markdown("**Select new time slice data file**")
+    tab_browse, tab_manual = st.tabs(["📂 Browse Files", "📝 Manual Path Entry"])
+
+    new_dm4_file_path = ""
+
+    with tab_browse:
+        browse_dir = st.text_input(
+            "Start browsing from directory",
+            value=os.path.expanduser("~"),
+            key="timeslice_browse_dir",
+        )
+
+        if os.path.isdir(browse_dir):
+            try:
+                all_files = []
+                for root, dirs, files in os.walk(browse_dir):
+                    if root == browse_dir:
+                        for file in files:
+                            if file.endswith((".dm4", ".h5", ".hdf5")):
+                                all_files.append(os.path.join(root, file))
+                        for dir_name in dirs[:20]:
+                            dir_path = os.path.join(root, dir_name)
+                            for file in os.listdir(dir_path):
+                                if file.endswith((".dm4", ".h5", ".hdf5")):
+                                    all_files.append(os.path.join(dir_path, file))
+
+                if all_files:
+                    all_files.sort()
+                    display_files = [os.path.relpath(f, browse_dir) for f in all_files]
+                    selected_file = st.selectbox(
+                        f"Found {len(all_files)} file(s)",
+                        options=range(len(all_files)),
+                        format_func=lambda i: f"{display_files[i]} ({os.path.getsize(all_files[i]) / (1024*1024):.2f} MB)",
+                        key="timeslice_file_selector",
+                    )
+                    if selected_file is not None:
+                        new_dm4_file_path = all_files[selected_file]
+                        st.success(
+                            f"✅ Selected: `{os.path.basename(new_dm4_file_path)}`"
+                        )
+                else:
+                    st.info("No .dm4/.h5 files found in this directory")
+            except Exception as e:
+                st.error(f"Error browsing: {e}")
+        else:
+            st.warning(f"Directory not found: {browse_dir}")
+
+    with tab_manual:
+        new_dm4_file_path_manual = st.text_input(
+            "Enter full path to DM4 or HDF5 file",
+            value="",
+            key="timeslice_dm4_manual",
+        )
+        if new_dm4_file_path_manual:
+            new_dm4_file_path = new_dm4_file_path_manual
+
+    # Validate file
+    file_valid = False
+    file_type: str = ""
+    if new_dm4_file_path:
+        if os.path.exists(new_dm4_file_path):
+            if new_dm4_file_path.endswith(".dm4"):
+                file_valid = True
+                file_type = "dm4"
+                st.success("✅ Valid DM4 file")
+            elif new_dm4_file_path.endswith((".h5", ".hdf5")):
+                file_valid = True
+                file_type = "h5"
+                st.success("✅ Valid HDF5 file")
+            else:
+                st.error("❌ Invalid file type. Use .dm4 or .h5 files")
+        else:
+            st.error("❌ File not found")
+
+    st.divider()
+
+    # Section 3: Processing Options
+    st.subheader("3️⃣ Processing Configuration")
+
+    # Image Enhancement Options
+    st.markdown("**Image Enhancement Options**")
+    col_enhance1, col_enhance2, col_enhance3 = st.columns(3)
+
+    with col_enhance1:
+        use_log_scale = st.checkbox(
+            "📈 Log Scaling",
+            key="timeslice_use_log_scale",
+            value=False,
+            help="Apply logarithmic scaling to enhance visibility of ghost disks and low-intensity features",
+        )
+
+    with col_enhance2:
+        use_histogram_equalization = st.checkbox(
+            "📊 Histogram Equalization",
+            key="timeslice_use_histogram_eq",
+            value=False,
+            help="Improve contrast by redistributing intensity values",
+        )
+
+    with col_enhance3:
+        use_gamma_correction = st.checkbox(
+            "🔆 Gamma Correction",
+            key="timeslice_use_gamma",
+            value=False,
+            help="Adjust brightness using gamma correction",
+        )
+
+    gamma_value = 1.0
+    if use_gamma_correction:
+        gamma_value = st.slider(
+            "Gamma Value",
+            min_value=0.1,
+            max_value=3.0,
+            value=1.0,
+            step=0.1,
+            key="timeslice_gamma_value",
+            help="Values < 1 brighten the image, values > 1 darken it",
+        )
+
+    # Show preview if file is selected and any enhancement is enabled
+    if (
+        file_valid
+        and new_dm4_file_path
+        and (use_log_scale or use_histogram_equalization or use_gamma_correction)
+    ):
+        with st.expander("🔍 Preview Enhancement Effects", expanded=True):
+            st.markdown("**Live Preview: Original vs Enhanced**")
+            try:
+                mid_i, mid_j = 0, 0
+                sample_pattern = None
+
+                if file_type == "dm4":
+                    import py4DSTEM
+
+                    dataset = py4DSTEM.import_file(new_dm4_file_path)  # type: ignore
+                    mid_i = dataset.data.shape[0] // 2  # type: ignore
+                    mid_j = dataset.data.shape[1] // 2  # type: ignore
+                    sample_pattern = np.asarray(dataset.data[mid_i, mid_j])  # type: ignore
+                elif file_type == "h5":
+                    import h5py
+
+                    dataset_key_preview = st.session_state.get(
+                        "timeslice_h5_dataset_key", "frame"
+                    )
+                    with h5py.File(new_dm4_file_path, "r") as f:
+                        try:
+                            data = f[dataset_key_preview]  # type: ignore
+                            if isinstance(data, h5py.Dataset) and len(data.shape) == 4:
+                                mid_i = data.shape[0] // 2
+                                mid_j = data.shape[1] // 2
+                                sample_pattern = np.asarray(data[mid_i, mid_j, :, :])  # type: ignore
+                        except:
+                            st.warning("Could not load preview from HDF5.")
+
+                if sample_pattern is not None:
+                    from scripts.hdf5_to_png import apply_image_enhancements
+
+                    enhanced_pattern = apply_image_enhancements(
+                        sample_pattern,
+                        use_log_scale=use_log_scale,
+                        use_histogram_eq=use_histogram_equalization,
+                        gamma=gamma_value if use_gamma_correction else None,
+                    )
+
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                    im1 = ax1.imshow(sample_pattern, cmap="gray")
+                    ax1.set_title("Original", fontsize=14, fontweight="bold")
+                    ax1.set_xlabel("X (pixels)")
+                    ax1.set_ylabel("Y (pixels)")
+                    plt.colorbar(im1, ax=ax1, label="Intensity", fraction=0.046)
+
+                    im2 = ax2.imshow(enhanced_pattern, cmap="gray")
+                    enhancements = []
+                    if use_log_scale:
+                        enhancements.append("Log")
+                    if use_histogram_equalization:
+                        enhancements.append("HistEq")
+                    if use_gamma_correction:
+                        enhancements.append(f"γ={gamma_value:.1f}")
+                    title = "Enhanced: " + " + ".join(enhancements)
+                    ax2.set_title(title, fontsize=14, fontweight="bold")
+                    ax2.set_xlabel("X (pixels)")
+                    ax2.set_ylabel("Y (pixels)")
+                    plt.colorbar(im2, ax=ax2, label="Intensity", fraction=0.046)
+
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close(fig)
+                    st.caption(f"📍 Sample from scan position ({mid_i}, {mid_j})")
+            except Exception as e:
+                st.warning(f"Could not generate preview: {e}")
+
+    st.divider()
+
+    # Cropping Options
+    st.markdown("**Cropping Options**")
+    crop_images = st.checkbox(
+        "Crop Images",
+        key="timeslice_crop_images",
+        help="Enable to crop diffraction patterns to a specific region",
+    )
+
+    crop_values = None
+    if crop_images:
+        st.write("**Crop Parameters (x_min, x_max, y_min, y_max):**")
+        st.caption("⚠️ Make sure crop values are within your image dimensions!")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            x_min = st.number_input(
+                "X Min", value=0, min_value=0, key="timeslice_x_min"
+            )
+        with col2:
+            x_max = st.number_input(
+                "X Max", value=512, min_value=1, key="timeslice_x_max"
+            )
+        with col3:
+            y_min = st.number_input(
+                "Y Min", value=0, min_value=0, key="timeslice_y_min"
+            )
+        with col4:
+            y_max = st.number_input(
+                "Y Max", value=512, min_value=1, key="timeslice_y_max"
+            )
+
+        if x_min >= x_max:
+            st.error("❌ X Min must be less than X Max!")
+        elif y_min >= y_max:
+            st.error("❌ Y Min must be less than Y Max!")
+        elif (x_max - x_min) < 10 or (y_max - y_min) < 10:
+            st.warning("⚠️ Crop region is very small. Make sure this is intentional.")
+        else:
+            crop_values = (x_min, x_max, y_min, y_max)
+
+            # Show crop preview
+            if file_valid and new_dm4_file_path:
+                with st.expander("✂️ Preview Crop Region", expanded=True):
+                    st.markdown("**Live Preview: Full Image vs Cropped Region**")
+                    try:
+                        mid_i, mid_j = 0, 0
+                        sample_pattern = None
+
+                        if file_type == "dm4":
+                            import py4DSTEM
+
+                            dataset = py4DSTEM.import_file(new_dm4_file_path)  # type: ignore
+                            mid_i = dataset.data.shape[0] // 2  # type: ignore
+                            mid_j = dataset.data.shape[1] // 2  # type: ignore
+                            sample_pattern = np.asarray(dataset.data[mid_i, mid_j])  # type: ignore
+                        elif file_type == "h5":
+                            import h5py
+
+                            dataset_key_preview = st.session_state.get(
+                                "timeslice_h5_dataset_key", "frame"
+                            )
+                            with h5py.File(new_dm4_file_path, "r") as f:
+                                try:
+                                    data = f[dataset_key_preview]  # type: ignore
+                                    if (
+                                        isinstance(data, h5py.Dataset)
+                                        and len(data.shape) == 4
+                                    ):
+                                        mid_i = data.shape[0] // 2
+                                        mid_j = data.shape[1] // 2
+                                        sample_pattern = np.asarray(
+                                            data[mid_i, mid_j, :, :]
+                                        )  # type: ignore
+                                except:
+                                    st.warning("Could not load preview from HDF5.")
+
+                        if sample_pattern is not None:
+                            img_height, img_width = sample_pattern.shape
+                            if x_max > img_width or y_max > img_height:
+                                st.error(
+                                    f"❌ Crop values exceed image dimensions! Image size: {img_width} x {img_height}"
+                                )
+                            else:
+                                cropped_pattern = sample_pattern[
+                                    y_min:y_max, x_min:x_max
+                                ]
+
+                                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+                                im1 = ax1.imshow(sample_pattern, cmap="gray")
+                                ax1.set_title(
+                                    "Full Image with Crop Region",
+                                    fontsize=14,
+                                    fontweight="bold",
+                                )
+                                ax1.set_xlabel("X (pixels)")
+                                ax1.set_ylabel("Y (pixels)")
+
+                                from matplotlib.patches import Rectangle
+
+                                rect = Rectangle(
+                                    (x_min, y_min),
+                                    x_max - x_min,
+                                    y_max - y_min,
+                                    linewidth=2,
+                                    edgecolor="red",
+                                    facecolor="none",
+                                    linestyle="--",
+                                )
+                                ax1.add_patch(rect)
+                                ax1.text(
+                                    x_min,
+                                    y_min - 5,
+                                    "Crop Region",
+                                    color="red",
+                                    fontsize=10,
+                                    fontweight="bold",
+                                    va="bottom",
+                                )
+                                plt.colorbar(
+                                    im1, ax=ax1, label="Intensity", fraction=0.046
+                                )
+
+                                im2 = ax2.imshow(cropped_pattern, cmap="gray")
+                                crop_size_str = f"{x_max - x_min} × {y_max - y_min}"
+                                ax2.set_title(
+                                    f"Cropped Image ({crop_size_str} px)",
+                                    fontsize=14,
+                                    fontweight="bold",
+                                )
+                                ax2.set_xlabel("X (pixels)")
+                                ax2.set_ylabel("Y (pixels)")
+                                plt.colorbar(
+                                    im2, ax=ax2, label="Intensity", fraction=0.046
+                                )
+
+                                plt.tight_layout()
+                                st.pyplot(fig)
+                                plt.close(fig)
+                                st.caption(
+                                    f"📍 Sample from scan position ({mid_i}, {mid_j}) | Original: {img_width} × {img_height} px → Cropped: {crop_size_str} px"
+                                )
+                    except Exception as e:
+                        st.warning(f"Could not generate crop preview: {e}")
+
+    # HDF5-specific settings
+    if file_type == "h5":
+        st.divider()
+        st.markdown("**HDF5 Dataset Settings**")
+        dataset_key = st.text_input(
+            "Dataset Key",
+            value="frame",
+            key="timeslice_h5_dataset_key",
+            help="Name of the dataset in the HDF5 file (common values: 'frame', 'data', 'frames')",
+        )
+
+    st.divider()
+
+    # Boxing and Inference Options
+    st.markdown("**Boxing and Inference Options**")
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        # Try to load original project settings
+        original_box_size = 3
+        original_batch_size = 32
+        original_config_path = os.path.join("configs", f"{selected_project}.yaml")
+        if os.path.exists(original_config_path):
+            try:
+                with open(original_config_path) as f:
+                    original_config = yaml.safe_load(f)
+                    if (
+                        "model" in original_config
+                        and "batch_size" in original_config["model"]
+                    ):
+                        original_batch_size = original_config["model"]["batch_size"]
+                    st.info(
+                        f"ℹ️ Using settings from original project: `{selected_project}`"
+                    )
+            except:
+                st.warning("⚠️ Could not load original project config")
+
+        box_size = st.slider(
+            "Box Size",
+            min_value=1,
+            max_value=5,
+            value=original_box_size,
+            key="timeslice_box_size",
+            help="Should match the box size used in original training",
+        )
+
+    with col2:
+        batch_size = st.selectbox(
+            "Batch Size",
+            options=[1, 8, 16, 32, 64, 128],
+            index=[1, 8, 16, 32, 64, 128].index(original_batch_size)
+            if original_batch_size in [1, 8, 16, 32, 64, 128]
+            else 3,
+            key="timeslice_batch_size",
+            help="Number of images to process at once. Larger = faster but uses more memory",
+        )
+
+    with col3:
+        use_softmax = st.checkbox(
+            "Apply Softmax to Output",
+            value=True,
+            key="timeslice_softmax",
+            help="Apply softmax activation for probability distribution",
+        )
+
+    # Auto-run conversion and boxing option
+    auto_process = st.checkbox(
+        "🚀 Automatically convert and box new time slice data",
+        value=True,
+        key="timeslice_auto_process",
+        help="If checked, will automatically run conversion → boxing → inference. If unchecked, you'll do these steps manually.",
+    )
+
+    st.divider()
+
+    # Section 4: Run Analysis
+    st.subheader("4️⃣ Run Analysis on New Time Slice")
+
+    if st.button("🎯 Process New Time Slice", type="primary", key="process_timeslice"):
+        # Lazy imports
+        from scripts.create_average_boxes import convert_all_to_boxes
+        from scripts.dm4_to_png import export_dm4_bf_images_to_png
+        from scripts.hdf5_to_png import save_h5_diffraction_to_png
+
+        if not project_name_valid:
+            st.error("❌ Please enter a valid project name")
+            return
+
+        if not file_valid:
+            st.error("❌ Please select a valid data file")
+            return
+
+        try:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Set up paths
+            output_png_path = f"data/png/{new_project_name}"
+            boxed_png_path = f"data/boxed_png/{new_project_name}"
+            output_save_path = f"output/{new_project_name}/"
+
+            if auto_process:
+                # Step 1: Convert to PNG
+                status_text.text(f"🔄 Converting {file_type.upper()} to PNG...")
+                progress_bar.progress(20)
+
+                if file_type == "dm4":
+                    export_dm4_bf_images_to_png(
+                        new_dm4_file_path,
+                        output_png_path,
+                        crop=crop_images,
+                        crop_values=crop_values,
+                        use_log_scale=use_log_scale,
+                        use_histogram_eq=use_histogram_equalization,
+                        gamma=gamma_value if use_gamma_correction else None,
+                    )
+                elif file_type == "h5":
+                    dataset_key = st.session_state.get(
+                        "timeslice_h5_dataset_key", "frame"
+                    )
+                    save_h5_diffraction_to_png(
+                        new_dm4_file_path,
+                        output_png_path,
+                        dataset_key=dataset_key,
+                        crop=crop_images,
+                        crop_values=crop_values,
+                        use_log_scale=use_log_scale,
+                        use_histogram_eq=use_histogram_equalization,
+                        gamma=gamma_value if use_gamma_correction else None,
+                    )
+
+                status_text.text("✅ Conversion complete!")
+                progress_bar.progress(40)
+
+                # Get dimensions from PNG files
+                from scripts.create_average_boxes import logical_sort
+
+                png_file_paths = [
+                    os.path.join(output_png_path, f)
+                    for f in os.listdir(output_png_path)
+                    if f.endswith(".png")
+                ]
+                if not png_file_paths:
+                    st.error("❌ No PNG files generated!")
+                    return
+
+                # Parse dimensions from filenames using logical_sort
+                # Format: {basename}_{row}_{col}.png
+                sorted_files, _ = logical_sort(png_file_paths)
+                last_file = os.path.basename(sorted_files[-1])
+
+                # Show a few sample filenames for debugging
+                with st.expander("🔍 Debug: Sample PNG filenames", expanded=False):
+                    sample_files = [os.path.basename(f) for f in sorted_files[:3]] + [
+                        os.path.basename(f) for f in sorted_files[-3:]
+                    ]
+                    for f in sample_files:
+                        st.code(f)
+
+                # Remove .png extension first
+                name_without_ext = last_file.replace(".png", "")
+                # Split and get last two parts (row and col)
+                parts = name_without_ext.split("_")
+                if len(parts) < 2:
+                    st.error(f"❌ Cannot parse dimensions from filename: {last_file}")
+                    return
+                try:
+                    n_rows = int(parts[-2]) + 1
+                    n_cols = int(parts[-1]) + 1
+                except ValueError:
+                    st.error(f"❌ Cannot parse dimensions from filename: {last_file}")
+                    st.info(
+                        f"Expected format: basename_row_col.png, got parts: {parts}"
+                    )
+                    return
+
+                st.info(f"📐 Detected dimensions: {n_cols} x {n_rows}")
+                st.caption(
+                    f"From last file: {last_file} → row={parts[-2]}, col={parts[-1]}"
+                )
+
+                # Step 2: Boxing
+                status_text.text("📦 Creating averaged boxes...")
+                progress_bar.progress(60)
+
+                convert_all_to_boxes(
+                    stem_image_dir=output_png_path,
+                    output_dir=boxed_png_path,
+                    box_size=box_size,
+                    n_cols=n_cols,
+                    n_rows=n_rows,
+                )
+
+                status_text.text("✅ Boxing complete!")
+                progress_bar.progress(80)
+
+            else:
+                # User handles conversion/boxing manually
+                boxed_png_path = f"data/boxed_png/{new_project_name}"
+                if not os.path.exists(boxed_png_path):
+                    st.error(
+                        f"❌ Boxed images not found at `{boxed_png_path}`. Please run conversion and boxing first."
+                    )
+                    return
+
+                # Get dimensions from boxed files
+                # Format for boxed files: {row}_{col}_boxsize_{size}.png
+                from scripts.create_average_boxes import logical_sort
+
+                boxed_file_paths = [
+                    os.path.join(boxed_png_path, f)
+                    for f in os.listdir(boxed_png_path)
+                    if f.endswith(".png")
+                ]
+                if not boxed_file_paths:
+                    st.error(f"❌ No boxed files found in {boxed_png_path}")
+                    return
+
+                sorted_files, _ = logical_sort(boxed_file_paths)
+                last_file = os.path.basename(sorted_files[-1])
+                # Boxed format is: row_col_boxsize_X.png
+                parts = last_file.replace(".png", "").split("_")
+                if len(parts) < 2:
+                    st.error(
+                        f"❌ Cannot parse dimensions from boxed filename: {last_file}"
+                    )
+                    return
+                try:
+                    # For boxed files, first two parts are row and col
+                    n_rows = int(parts[0]) + 1
+                    n_cols = int(parts[1]) + 1
+                except ValueError:
+                    st.error(
+                        f"❌ Cannot parse dimensions from boxed filename: {last_file}"
+                    )
+                    st.info(
+                        f"Expected format: row_col_boxsize_X.png, got parts: {parts}"
+                    )
+                    return
+
+                st.info(f"📐 Detected dimensions from boxed files: {n_cols} x {n_rows}")
+                st.caption(
+                    f"From last boxed file: {last_file} → row={parts[0]}, col={parts[1]}"
+                )
+
+            # Step 3: Run inference with selected checkpoint
+            status_text.text("🧠 Running inference with trained model...")
+            progress_bar.progress(90)
+
+            os.makedirs(output_save_path, exist_ok=True)
+
+            # Use the new inference function
+            # Note: dim1=n_cols, dim2=n_rows to match plot_embeddings convention
+            plot_path = run_inference_from_checkpoint(
+                checkpoint_path=checkpoint_path,
+                data_dir=boxed_png_path,
+                output_path=output_save_path,
+                dim1=n_cols,
+                dim2=n_rows,
+                project_name=new_project_name,
+                with_softmax=use_softmax,
+                batch_size=batch_size,
+            )
+
+            progress_bar.progress(100)
+            status_text.text("✅ Analysis complete!")
+
+            st.success("🎉 Time slice analysis completed successfully!")
+            st.balloons()
+
+            # Display results
+            st.divider()
+            st.subheader("📊 Results")
+
+            if plot_path and os.path.exists(plot_path):
+                st.image(plot_path, caption="Polarization Map - New Time Slice")
+
+                # Download button
+                with open(plot_path, "rb") as file:
+                    st.download_button(
+                        label="📥 Download Result",
+                        data=file,
+                        file_name=os.path.basename(plot_path),
+                        mime="image/png",
+                        type="primary",
+                    )
+
+                st.info(
+                    f"💾 Full results saved to: `{output_save_path}`\n\n"
+                    f"📁 PNG files: `{output_png_path}`\n\n"
+                    f"📦 Boxed files: `{boxed_png_path}`"
+                )
+
+        except Exception as e:
+            st.error(f"❌ Error during processing: {str(e)}")
+            import traceback
+
+            st.code(traceback.format_exc())
+
+
+def run_inference_from_checkpoint(
+    checkpoint_path: str,
+    data_dir: str,
+    output_path: str,
+    dim1: int,
+    dim2: int,
+    project_name: str,
+    with_softmax: bool = True,
+    batch_size: int = 32,
+) -> str:
+    """
+    Run inference using a specific checkpoint on new data
+
+    Args:
+        checkpoint_path: Path to the .ckpt file
+        data_dir: Directory containing boxed PNG images
+        output_path: Where to save the output
+        dim1: Number of rows in the scan
+        dim2: Number of columns in the scan
+        project_name: Name for the output file
+        with_softmax: Whether to apply softmax to outputs
+        batch_size: Number of images to process at once
+
+    Returns:
+        Path to the generated plot
+    """
+    import torch
+    from PIL import Image
+    from torchvision import transforms
+    from tqdm import tqdm
+
+    from src.config import Config
+    from src.models import ThreeLayerCnn
+    from src.utils import load_state_dict
+
+    # Determine device
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
+    # Initialize model (assume ThreeLayerCnn for now - could be made smarter)
+    # Create inference config with proper batch_size
+    checkpoint_inference_configuration = create_inference_config(device)
+    checkpoint_inference_configuration["model"]["batch_size"] = batch_size
+    inference_config_file_path = os.path.join(output_path, "inference_config.yaml")
+
+    with open(inference_config_file_path, "w") as f:
+        yaml.dump(checkpoint_inference_configuration, f, default_flow_style=False)
+
+    # Convert dict to Config object
+    checkpoint_inference_config = Config.from_yaml(inference_config_file_path)
+
+    model = ThreeLayerCnn(checkpoint_inference_config)  # type: ignore
+    model.to(device)
+
+    # Load weights
+    load_state_dict(model, checkpoint_path, device)
+    model.eval()
+
+    # Load images
+
+    image_list = []
+    for root, _, files in os.walk(data_dir):
+        for file in files:
+            if file.endswith(".png"):
+                image_list.append(os.path.join(root, file))
+
+    # For boxed images, use simple numeric sorting (format: row_col_boxsize_X.png)
+    # Don't use logical_sort_coordinates which swaps row/col for original PNG format
+    def boxed_sort_key(filepath):
+        filename = os.path.basename(filepath)
+        parts = filename.replace(".png", "").split("_")
+        # For boxed files: parts = [row, col, 'boxsize3'] or similar
+        # Return (row, col) as integers for sorting
+        try:
+            return (int(parts[0]), int(parts[1]))
+        except (ValueError, IndexError):
+            return (0, 0)
+
+    image_list = sorted(image_list, key=boxed_sort_key)
+
+    if len(image_list) == 0:
+        raise ValueError(f"No images found in {data_dir}")
+
+    # Run inference with batching
+    output_list = []
+    transform = transforms.Compose([transforms.Resize((256, 256))])
+
+    with torch.no_grad():
+        # Process images in batches
+        for i in tqdm(range(0, len(image_list), batch_size), desc="Running inference"):
+            batch_paths = image_list[i : i + batch_size]
+            batch_tensors = []
+
+            for img_path in batch_paths:
+                image = Image.open(img_path).convert("L")
+                image_array = np.array(image)
+                image_tensor = (
+                    torch.tensor(image_array).unsqueeze(0).unsqueeze(0).float()
+                )
+                image_tensor = transform(image_tensor)
+                batch_tensors.append(image_tensor)
+
+            # Stack batch and move to device
+            batch = torch.cat(batch_tensors, dim=0).to(device)
+
+            # Run inference on batch
+            output = model(batch)
+
+            if with_softmax:
+                output = torch.nn.functional.softmax(output, dim=1)
+
+            # Store results
+            for j in range(output.shape[0]):
+                output_list.append(output[j].cpu())
+
+    # Reshape and save
+    all_outputs = np.array(output_list)
+    out_image = all_outputs.reshape((dim1, dim2, 3))
+    out_image = (out_image / out_image.max() * 255).astype(np.uint8)
+
+    # Apply same transformations as in inference.py
+    out_image = np.flip(out_image, axis=0)
+    out_image = np.rot90(out_image, k=3)
+
+    # Save
+    os.makedirs(output_path, exist_ok=True)
+    plot_save_path = os.path.join(output_path, f"{project_name}_timeslice_result.png")
+    plt.imsave(plot_save_path, out_image)
+
+    return plot_save_path
 
 
 def create_training_config(config):
@@ -2276,6 +3220,72 @@ def create_training_config(config):
         },
         "test": {
             "load_path": f"{config['project_name']}/",
+        },
+    }
+
+
+def create_inference_config(device: str) -> dict:
+    """Create a training configuration dictionary"""
+    return {
+        "seed": 42,
+        "test_only": False,
+        "accelerator": device,  # Use selected device
+        "task": "binary",
+        "data": {
+            "data_dir": "none",  # Use boxed images for training
+            "train_dir": "none",  # Use boxed images for training
+            "data_loader": "RawPngLoader",
+            "train_ratio": 0.8,
+            "val_ratio": 0.1,
+            "test_ratio": 0.1,
+            "num_workers": 4,
+            "augment": False,
+            "image_size": 256,
+            "labels_file": "none",
+        },
+        "wandb": {
+            "project_name": "ghost-hunter-web",
+            "run_name": "",
+            "experiment_id": "1",
+            "ex_description": "none",
+        },
+        "model": {
+            "in_channels": 1,
+            "batch_size": 32,
+            "model_name": "ThreeLayerCnn",
+            "accuracy_metric": "cross_entropy",
+        },
+        "optimizer": {
+            "optimizer": "adamw",
+            "lr": 0.001,
+            "weight_decay": 0.002,
+            "momentum": 0.9,
+            "betas": [0.9, 0.999],
+        },
+        "scheduler": {
+            "scheduler": "plateau",
+            "step_size": 30,
+            "step_size_up": 1000,
+            "patience": 2,
+            "factor": 0.5,
+            "min_lr": 3e-5,
+            "max_lr": 5e-5,
+            "T_max": 10,
+            "gamma": 0.1,
+        },
+        "trainer": {
+            "num_nodes": 1,
+            "devices": 1,
+            "max_epochs": 10,
+            "log_dir": "./logs",
+            "log_every_n_steps": 100,
+            "load_path": "",
+            "resume_from": False,
+            "checkpoint_dir": "none/",
+            "wandb_logging": False,
+        },
+        "test": {
+            "load_path": "none/",
         },
     }
 

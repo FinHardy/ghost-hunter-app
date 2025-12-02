@@ -26,7 +26,8 @@ def apply_image_enhancements(
     Returns:
         Enhanced image array
     """
-    enhanced = image.copy()
+    # Ensure we have a numpy array (not memoryview)
+    enhanced = np.asarray(image).copy()
 
     # Apply log scaling (helps with ghost disks)
     if use_log_scale:
@@ -96,12 +97,14 @@ def export_dm4_bf_images_to_png(
         if binning_param > 1:
             pre.bin_data_diffraction(image, binning_param)
         shape = image.data.shape  # type: ignore
+        print(shape)
         # TODO: put *args in the function signature
         if crop:
             image = image.crop_Q(crop_values)  # type: ignore
         for row in tqdm(range(shape[0])):
             for col in range(shape[1]):
-                diffraction_pattern = image[row, col].data  # type: ignore
+                # Convert to numpy array to avoid memoryview issues
+                diffraction_pattern = np.asarray(image[row, col].data)  # type: ignore
 
                 # Apply image enhancements
                 diffraction_pattern = apply_image_enhancements(

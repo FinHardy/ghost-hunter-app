@@ -25,7 +25,8 @@ def apply_image_enhancements(
     Returns:
         Enhanced image array
     """
-    enhanced = image.copy()
+    # Ensure we have a numpy array (not memoryview)
+    enhanced = np.asarray(image).copy()
 
     # Apply log scaling (helps with ghost disks)
     if use_log_scale:
@@ -104,7 +105,8 @@ def save_h5_diffraction_to_png(
 
             for i in tqdm(range(scan_y), desc="Saving PNGs"):
                 for j in range(scan_x):
-                    pattern = data[i, j]  # type: ignore
+                    # Convert to numpy array to avoid memoryview issues
+                    pattern = np.asarray(data[i, j])  # type: ignore
 
                     # Optional cropping
                     if crop and crop_values is not None:

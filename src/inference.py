@@ -78,6 +78,7 @@ def output_polarisation_image(
     dim2: int,
     save_name=None,
     with_softmax: bool = True,
+    batch_size: int = 32,
 ) -> str:
     image_list: list = []
     ex_description = _config.wandb.ex_description
@@ -91,7 +92,10 @@ def output_polarisation_image(
 
     assert len(image_list) > 0, "No images found in the directory"
 
-    dataloader = ImageDataset(image_list, _config.accelerator)
+    dataset = ImageDataset(image_list, _config.accelerator)
+    dataloader = torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=0
+    )
 
     output_list: list = []
 
@@ -99,20 +103,23 @@ def output_polarisation_image(
 
     if with_softmax:
         with torch.no_grad():
-            for image in tqdm(dataloader):
-                image.to(_config.accelerator)
-                output = model(image)
+            for batch in tqdm(dataloader):
+                batch = batch.squeeze(1)  # Remove extra dimension from batching
+                batch = batch.to(_config.accelerator)
+                output = model(batch)
                 # apply softmax to output
                 output = torch.nn.functional.softmax(output, dim=1)
                 output_list.append(output.cpu())
     else:
         with torch.no_grad():
-            for image in tqdm(dataloader):
-                image.to(_config.accelerator)
-                output = model(image)
+            for batch in tqdm(dataloader):
+                batch = batch.squeeze(1)  # Remove extra dimension from batching
+                batch = batch.to(_config.accelerator)
+                output = model(batch)
                 output_list.append(output.cpu())
 
-    all_outputs = np.array(output_list)
+    # Concatenate all batched outputs
+    all_outputs = torch.cat(output_list, dim=0).numpy()
 
     out_image = all_outputs.reshape((dim1, dim2, 3))
 
@@ -160,6 +167,7 @@ def plot_embeddings(
     dim2: int,
     save_path: str = "./images/",
     with_softmax: bool = True,
+    batch_size: int = 32,
 ):
     """
     Description: Extracts the embeddings from the network and plots them to a figure
@@ -212,6 +220,7 @@ def plot_embeddings(
         dim1=dim1,
         dim2=dim2,
         with_softmax=with_softmax,
+        batch_size=batch_size,
     )
 
     return plot_path

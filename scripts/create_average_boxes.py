@@ -130,8 +130,10 @@ def max_vals_image(
     # n_rows = len(image_list) // array_width
     # n_cols = array_width
 
-    if starting_x < 0 or starting_y < 0 or starting_x > n_cols or starting_y > n_rows:
-        raise ValueError("Starting x and y values bust be inside range of the grid")
+    if starting_x < 0 or starting_y < 0 or starting_x >= n_cols or starting_y >= n_rows:
+        raise ValueError(
+            f"Starting position ({starting_y}, {starting_x}) is out of bounds for grid ({n_rows}, {n_cols})"
+        )
 
     for i in range(box_size):
         # Dynamically compute the row indices, ensuring they stay in bounds
@@ -218,20 +220,33 @@ def convert_all_to_boxes(
 
     sorted_image_list, _ = logical_sort(image_list)
 
-    print(f"Processing {len(sorted_image_list)} images with box_size={box_size}")
+    print(
+        f"Processing {len(sorted_image_list)} images ({n_rows}x{n_cols}) with box_size={box_size}"
+    )
+    print(f"Expected dimensions: {n_rows}×{n_cols} = {n_rows * n_cols} images")
+    print(f"Will create {len(sorted_image_list)} boxed images (same dimensions)")
 
+    errors = 0
     for i in tqdm(range(len(sorted_image_list)), desc="Creating boxed images"):
         row = i // n_cols
         col = i % n_cols
-        max_vals_image(
-            box_size,
-            sorted_image_list,
-            n_cols,
-            n_rows,
-            col,
-            row,
-            to_save=True,
-            output_dir=output_dir,
-            smoothing=kwargs.get("smoothing", "gamma"),
-            gamma=kwargs.get("gamma", 1.2),
-        )
+        try:
+            max_vals_image(
+                box_size,
+                sorted_image_list,
+                n_cols,
+                n_rows,
+                col,
+                row,
+                to_save=True,
+                output_dir=output_dir,
+                smoothing=kwargs.get("smoothing", "gamma"),
+                gamma=kwargs.get("gamma", 1.2),
+            )
+        except Exception as e:
+            errors += 1
+            if errors <= 5:  # Only print first 5 errors
+                print(f"\nError at position ({row}, {col}), index {i}: {e}")
+
+    if errors > 0:
+        print(f"\nTotal errors: {errors}/{len(sorted_image_list)}")
